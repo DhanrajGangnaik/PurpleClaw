@@ -25,3 +25,8 @@ frontend/dist/
 
 # Logs
 *.log
+
+# Embedded database
+backend/data/*.db
+backend/data/*.db-*
+backend/data/backups/*.db

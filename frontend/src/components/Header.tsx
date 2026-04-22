@@ -19,6 +19,10 @@ const pageTitles: Record<string, { title: string; description: string }> = {
     title: 'Assets',
     description: 'Review asset exposure, ownership, and posture signals.',
   },
+  '/inventory': {
+    title: 'Inventory',
+    description: 'Review multi-environment asset ownership, exposure, and telemetry coverage.',
+  },
   '/findings': {
     title: 'Findings',
     description: 'Prioritize defensive findings and verification evidence.',
@@ -34,6 +38,26 @@ const pageTitles: Record<string, { title: string; description: string }> = {
   '/reports': {
     title: 'Reports',
     description: 'Inspect generated posture and telemetry reports.',
+  },
+  '/alerts': {
+    title: 'Alerts',
+    description: 'Review active SOC and NOC alerts across approved environments.',
+  },
+  '/signals': {
+    title: 'Security Signals',
+    description: 'Aggregate correlation-ready SOC signals and investigation context.',
+  },
+  '/service-health': {
+    title: 'Service Health',
+    description: 'Track NOC service availability, latency, errors, and health status.',
+  },
+  '/dependencies': {
+    title: 'Dependencies',
+    description: 'Monitor platform dependencies and telemetry-backed status safely.',
+  },
+  '/scheduler': {
+    title: 'Operations',
+    description: 'Run scheduled safe automation jobs and review scheduler state.',
   },
   '/automation': {
     title: 'Automation',

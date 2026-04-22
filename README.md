@@ -30,6 +30,75 @@ make build
 
 Runs the backend syntax check and frontend production build.
 
+## Persistence
+
+PurpleClaw still supports seeded demo data for local review. Tracking-mode records persist to an embedded SQLite database by default, so no external database is required for local use.
+
+Default SQLite database path:
+
+```text
+backend/data/purpleclaw.db
+```
+
+The backend creates `backend/data/` and the SQLite tables automatically on startup. Local `.db` files are ignored by git.
+
+For advanced deployments, set `DATABASE_URL` to use PostgreSQL instead:
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Example connection string:
+
+```text
+DATABASE_URL=postgresql://purpleclaw:purpleclaw@127.0.0.1:5432/purpleclaw
+```
+
+The backend initializes simple JSON-backed tables for core platform records on startup:
+
+- environments
+- assets
+- findings
+- remediations
+- inventory
+- telemetry summaries
+- automation runs
+- alerts
+- signals
+- intelligence update runs
+
+Database backend selection:
+
+- `DATABASE_URL` unset: embedded SQLite is used.
+- `DATABASE_URL` set: PostgreSQL is used.
+
+Platform health and SQLite backup routes:
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/platform/health` | Returns API status, database backend, SQLite path, connection and writable status, scheduler status, environment count, database size, and record counts. |
+| `POST` | `/platform/backup` | Creates an explicit SQLite backup under `backend/data/backups/` and keeps the newest 10 backups. |
+| `GET` | `/platform/backups` | Lists available SQLite backups. |
+| `POST` | `/platform/restore` | Restores the embedded SQLite database from an explicit backup filename. |
+
+## Safe Scheduler
+
+PurpleClaw includes a basic in-process scheduler facade for safe defensive automation. It does not execute arbitrary commands or offensive tooling. The scheduler currently exposes manual run-now controls and next-run estimates for:
+
+- tracking cycle
+- intelligence update
+- inventory match
+
+Scheduler API routes:
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/scheduler/status` | Returns scheduler job status, last run times, and next run estimates. |
+| `POST` | `/scheduler/run/tracking` | Runs the safe tracking cycle now. |
+| `POST` | `/scheduler/run/intelligence` | Runs the curated intelligence update now. |
+| `POST` | `/scheduler/run/inventory` | Runs seeded inventory-to-CVE matching now. |
+
 ## Overview
 
 PurpleClaw is a FastAPI backend for defining, validating, and safely simulating purple-team exercise plans. The current implementation focuses on the control plane: typed exercise plan intake, safety validation, audit metadata, structured logs, safe stub execution, and in-memory visibility into submitted plans and execution results.

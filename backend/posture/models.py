@@ -75,9 +75,25 @@ class Finding(BaseModel):
     exposure: str = Field(..., min_length=1)
     evidence_summary: str = Field(..., min_length=1)
     verification: str = Field(..., min_length=1)
+    score: int = Field(default=0, ge=0, le=100)
+    confidence: Literal["low", "medium", "high"] = "medium"
+    affected_component: str | None = None
     source: DataSource = DataSource.DEMO
     opened_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+
+class InventoryRecord(BaseModel):
+    """Environment-scoped package, service, image, or binary inventory record."""
+
+    inventory_id: str = Field(..., min_length=1)
+    environment_id: str = Field(default="homelab", min_length=1)
+    asset_id: str = Field(..., min_length=1)
+    component_name: str = Field(..., min_length=1)
+    component_type: Literal["package", "service", "container_image", "binary"]
+    version: str = Field(..., min_length=1)
+    source: DataSource = DataSource.DEMO
+    detected_at: datetime = Field(default_factory=utc_now)
 
 
 class RemediationTask(BaseModel):
@@ -137,6 +153,87 @@ class TelemetrySummary(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class Alert(BaseModel):
+    """Read-only operational or security alert."""
+
+    alert_id: str = Field(..., min_length=1)
+    environment_id: str = Field(default="homelab", min_length=1)
+    source: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+    severity: FindingSeverity
+    status: str = Field(..., min_length=1)
+    started_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    asset_id: str | None = None
+
+
+class SecuritySignal(BaseModel):
+    """Correlation-ready security signal record."""
+
+    signal_id: str = Field(..., min_length=1)
+    environment_id: str = Field(default="homelab", min_length=1)
+    source: str = Field(..., min_length=1)
+    category: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+    severity: FindingSeverity
+    confidence: Literal["low", "medium", "high"]
+    asset_id: str | None = None
+    evidence: str = Field(..., min_length=1)
+    detected_at: datetime = Field(default_factory=utc_now)
+    status: str = Field(..., min_length=1)
+
+
+class IncidentSummary(BaseModel):
+    """Investigation-friendly incident summary."""
+
+    incident_id: str = Field(..., min_length=1)
+    environment_id: str = Field(default="homelab", min_length=1)
+    title: str = Field(..., min_length=1)
+    severity: FindingSeverity
+    status: str = Field(..., min_length=1)
+    related_signal_ids: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ServiceHealth(BaseModel):
+    """NOC service health record."""
+
+    service_id: str = Field(..., min_length=1)
+    environment_id: str = Field(default="homelab", min_length=1)
+    name: str = Field(..., min_length=1)
+    status: str = Field(..., min_length=1)
+    availability: int = Field(..., ge=0, le=100)
+    latency_ms: int | None = Field(default=None, ge=0)
+    error_rate: float | None = Field(default=None, ge=0)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class DependencyStatus(BaseModel):
+    """Read-only dependency status record."""
+
+    dependency_id: str = Field(..., min_length=1)
+    environment_id: str = Field(default="homelab", min_length=1)
+    name: str = Field(..., min_length=1)
+    type: str = Field(..., min_length=1)
+    status: str = Field(..., min_length=1)
+    notes: str = Field(..., min_length=1)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class TelemetrySourceHealth(BaseModel):
+    """Health state for a telemetry source."""
+
+    source_id: str = Field(..., min_length=1)
+    environment_id: str = Field(default="homelab", min_length=1)
+    source_name: str = Field(..., min_length=1)
+    source_type: str = Field(..., min_length=1)
+    status: str = Field(..., min_length=1)
+    last_success_at: datetime | None = None
+    notes: str = Field(..., min_length=1)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class SystemMode(BaseModel):
     """Current data mode for posture tracking."""
 
@@ -163,9 +260,10 @@ class RiskByAsset(BaseModel):
 
     asset_id: str
     asset_name: str
-    risk_score: int
     open_findings: int
-    critical_findings: int
+    critical_count: int
+    high_count: int
+    aggregate_score: int
 
 
 class FindingSeverityCount(BaseModel):

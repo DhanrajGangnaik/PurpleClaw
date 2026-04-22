@@ -4,7 +4,7 @@ import { MetricCard } from '../components/MetricCard';
 import { Panel } from '../components/Panel';
 import { StatusBadge } from '../components/StatusBadge';
 import { runTrackingCycle } from '../services/api';
-import type { AutomationRun, PrometheusSummary, SystemMode } from '../types/api';
+import type { AutomationRun, LokiSummary, PrometheusSummary, SystemMode } from '../types/api';
 import { formatDate } from '../utils';
 
 interface AutomationProps {
@@ -12,12 +12,13 @@ interface AutomationProps {
   runs: AutomationRun[];
   selectedEnvironmentId: string;
   prometheus: PrometheusSummary | null;
+  loki: LokiSummary | null;
   loading: boolean;
   error: string | null;
   onDataChanged: () => void;
 }
 
-export function Automation({ mode, runs, selectedEnvironmentId, prometheus, loading, error, onDataChanged }: AutomationProps) {
+export function Automation({ mode, runs, selectedEnvironmentId, prometheus, loki, loading, error, onDataChanged }: AutomationProps) {
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const latest = runs[0] ?? null;
@@ -94,6 +95,35 @@ export function Automation({ mode, runs, selectedEnvironmentId, prometheus, load
             value={loading ? '...' : prometheus?.node_summary.node_exporter_present ? 'Available' : 'Missing'}
             caption={prometheus?.node_summary.node_exporter_present ? 'CPU, memory, disk, network when exposed' : 'Node exporter not detected'}
             accent={prometheus?.node_summary.node_exporter_present ? 'green' : 'purple'}
+          />
+        </div>
+      </Panel>
+
+      <Panel title="Loki Status" eyebrow="Log Ingestion">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            title="Log Ingestion"
+            value={loading ? '...' : loki?.health.status ?? 'unknown'}
+            caption={loki?.config.enabled ? 'Read-only Loki API' : 'Disabled for this environment'}
+            accent={loki?.health.healthy ? 'green' : loki?.config.enabled ? 'pink' : 'purple'}
+          />
+          <MetricCard
+            title="Log Coverage"
+            value={loading ? '...' : loki?.log_source_summary.source_count ?? 0}
+            caption={(loki?.log_source_summary.missing_sources.length ?? 0) > 0 ? `${loki?.log_source_summary.missing_sources.length ?? 0} expected source(s) missing` : 'Expected sources covered'}
+            accent={(loki?.log_source_summary.missing_sources.length ?? 0) > 0 ? 'pink' : 'cyan'}
+          />
+          <MetricCard
+            title="Authentication Signals"
+            value={loading ? '...' : loki?.auth_failure_summary.event_count ?? 0}
+            caption={loki?.auth_failure_summary.status ? `${loki.auth_failure_summary.status} across ${loki.auth_failure_summary.source_count} source(s)` : 'No authentication signals loaded'}
+            accent={(loki?.auth_failure_summary.event_count ?? 0) >= 5 ? 'pink' : 'green'}
+          />
+          <MetricCard
+            title="Service Error Signals"
+            value={loading ? '...' : loki?.service_error_summary.event_count ?? 0}
+            caption={loki?.service_error_summary.status ? `${loki.service_error_summary.status} across ${loki.service_error_summary.source_count} source(s)` : 'No service error signals loaded'}
+            accent={(loki?.service_error_summary.event_count ?? 0) >= 10 ? 'pink' : 'green'}
           />
         </div>
       </Panel>

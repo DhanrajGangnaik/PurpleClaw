@@ -10,11 +10,17 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/', label: 'Overview', icon: 'O' },
   { path: '/assets', label: 'Assets', icon: 'A' },
+  { path: '/inventory', label: 'Inventory', icon: 'I' },
   { path: '/findings', label: 'Findings', icon: 'F' },
   { path: '/remediation', label: 'Remediation', icon: 'R' },
+  { path: '/alerts', label: 'Alerts', icon: 'L' },
+  { path: '/signals', label: 'Security Signals', icon: 'S' },
+  { path: '/service-health', label: 'Service Health', icon: 'H' },
+  { path: '/dependencies', label: 'Dependencies', icon: 'D' },
+  { path: '/scheduler', label: 'Operations', icon: 'O' },
+  { path: '/automation', label: 'Automation', icon: 'A' },
   { path: '/policies', label: 'Policies', icon: 'P' },
   { path: '/reports', label: 'Reports', icon: 'R' },
-  { path: '/automation', label: 'Automation', icon: 'A' },
   { path: '/validator', label: 'Validator', icon: 'V' },
   { path: '/plans', label: 'Plans', icon: 'P' },
   { path: '/executions', label: 'Executions', icon: 'E' },
@@ -33,7 +39,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="mt-10 space-y-2">
+      <nav className="mt-8 max-h-[calc(100vh-15rem)] space-y-2 overflow-y-auto pr-1">
         {navItems.map((item) => (
           <NavLink
             key={item.path}

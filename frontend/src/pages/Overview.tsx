@@ -12,10 +12,16 @@ import type {
   ExercisePlan,
   Finding,
   FindingSeverity,
+  Alert,
+  LokiSummary,
   ManagedEnvironment,
   PrometheusSummary,
   RemediationTask,
+  RiskByAsset,
+  SecuritySignal,
+  ServiceHealth,
   SystemMode,
+  TelemetrySourceHealth,
   TelemetrySummaryResponse,
 } from '../types/api';
 import { formatDate } from '../utils';
@@ -25,9 +31,16 @@ interface OverviewProps {
   executions: ExecutionResult[];
   assets: Asset[];
   findings: Finding[];
+  vulnerabilityMatches: Finding[];
+  riskyAssets: RiskByAsset[];
   remediations: RemediationTask[];
   telemetry: TelemetrySummaryResponse | null;
   prometheus: PrometheusSummary | null;
+  loki: LokiSummary | null;
+  alerts: Alert[];
+  signals: SecuritySignal[];
+  serviceHealth: ServiceHealth[];
+  telemetrySourceHealth: TelemetrySourceHealth[];
   systemMode: SystemMode | null;
   automationRuns: AutomationRun[];
   selectedEnvironment: ManagedEnvironment;
@@ -112,9 +125,16 @@ export function Overview({
   executions,
   assets,
   findings,
+  vulnerabilityMatches,
+  riskyAssets,
   remediations,
   telemetry,
   prometheus,
+  loki,
+  alerts,
+  signals,
+  serviceHealth,
+  telemetrySourceHealth,
   systemMode,
   automationRuns,
   selectedEnvironment,
@@ -134,22 +154,11 @@ export function Overview({
       name: severity,
       value: findings.filter((finding) => finding.severity === severity).length,
     }));
-  const riskyAssets =
-    telemetry?.risk_by_asset.slice(0, 5) ??
-    assets
-      .map((asset) => ({
-        asset_id: asset.id,
-        asset_name: asset.name,
-        risk_score: asset.risk_score,
-        open_findings: openFindings.filter((finding) => finding.asset_id === asset.id).length,
-        critical_findings: criticalFindings.filter((finding) => finding.asset_id === asset.id).length,
-      }))
-      .sort((a, b) => b.risk_score - a.risk_score)
-      .slice(0, 5);
+  const visibleRiskyAssets = (riskyAssets.length ? riskyAssets : telemetry?.risk_by_asset ?? []).slice(0, 5);
   const assetNames = Object.fromEntries(assets.map((asset) => [asset.id, asset.name]));
   const topFindings = [...openFindings].sort((a, b) => {
     const weight: Record<FindingSeverity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 };
-    return weight[b.severity] - weight[a.severity];
+    return b.score - a.score || weight[b.severity] - weight[a.severity];
   });
   const progress = completionPercentage(remediations, telemetry);
   const isTrackingMode = systemMode?.mode === 'tracking';
@@ -160,6 +169,17 @@ export function Overview({
   const prometheusHealth = prometheus?.health;
   const prometheusTargets = prometheus?.target_summary;
   const prometheusNode = prometheus?.node_summary;
+  const lokiHealth = loki?.health;
+  const lokiSources = loki?.log_source_summary;
+  const lokiAuth = loki?.auth_failure_summary;
+  const lokiServiceErrors = loki?.service_error_summary;
+  const activeAlertsCount = telemetry?.overview_aggregates.active_alerts_count ?? alerts.filter((alert) => alert.status === 'active').length;
+  const criticalSignalsCount = telemetry?.overview_aggregates.critical_signals_count ?? signals.filter((signal) => signal.severity === 'critical').length;
+  const degradedServicesCount = telemetry?.overview_aggregates.degraded_services_count ?? serviceHealth.filter((service) => service.status === 'degraded').length;
+  const telemetryHealth = telemetry?.overview_aggregates.telemetry_source_health_summary;
+  const healthyTelemetrySources = telemetryHealth?.healthy ?? telemetrySourceHealth.filter((source) => source.status === 'healthy').length;
+  const totalTelemetrySources = telemetryHealth?.total ?? telemetrySourceHealth.length;
+  const highRiskVulnerabilityMatches = vulnerabilityMatches.filter((finding) => finding.score >= 70).length;
 
   const handleTrackingCycle = async () => {
     setRunningTracking(true);
@@ -174,15 +194,17 @@ export function Overview({
     }
   };
 
-  const riskyAssetColumns: DataColumn<(typeof riskyAssets)[number]>[] = [
+  const riskyAssetColumns: DataColumn<RiskByAsset>[] = [
     { key: 'asset', label: 'Asset', render: (asset) => <span className="theme-text-primary font-medium">{asset.asset_name}</span> },
-    { key: 'risk', label: 'Risk', render: (asset) => <StatusBadge label={String(asset.risk_score)} tone={asset.risk_score >= 85 ? 'red' : 'purple'} /> },
+    { key: 'risk', label: 'Risk Score', render: (asset) => <StatusBadge label={String(asset.aggregate_score)} tone={asset.aggregate_score >= 85 ? 'red' : 'purple'} /> },
     { key: 'open', label: 'Open', render: (asset) => asset.open_findings },
-    { key: 'critical', label: 'Critical', render: (asset) => asset.critical_findings },
+    { key: 'critical', label: 'Critical', render: (asset) => asset.critical_count },
+    { key: 'high', label: 'High', render: (asset) => asset.high_count },
   ];
   const findingColumns: DataColumn<Finding>[] = [
     { key: 'title', label: 'Finding', render: (finding) => <span className="theme-text-primary font-medium">{finding.title}</span> },
     { key: 'asset', label: 'Asset', render: (finding) => assetNames[finding.asset_id] ?? finding.asset_id },
+    { key: 'score', label: 'Risk Score', render: (finding) => <StatusBadge label={String(finding.score)} tone={finding.score >= 85 ? 'red' : finding.score >= 60 ? 'purple' : 'cyan'} /> },
     { key: 'severity', label: 'Severity', render: (finding) => <StatusBadge label={finding.severity} tone={severityTone(finding.severity)} /> },
     { key: 'updated', label: 'Updated', render: (finding) => formatDate(finding.updated_at) },
   ];
@@ -221,6 +243,39 @@ export function Overview({
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
+          title="Active Alerts"
+          value={postureLoading ? '...' : activeAlertsCount}
+          caption="SOC and NOC alerts"
+          accent={activeAlertsCount > 0 ? 'pink' : 'green'}
+        />
+        <MetricCard
+          title="Critical Signals"
+          value={postureLoading ? '...' : criticalSignalsCount}
+          caption="High-priority SOC signal queue"
+          accent={criticalSignalsCount > 0 ? 'pink' : 'green'}
+        />
+        <MetricCard
+          title="Degraded Services"
+          value={postureLoading ? '...' : degradedServicesCount}
+          caption="NOC health monitoring"
+          accent={degradedServicesCount > 0 ? 'purple' : 'green'}
+        />
+        <MetricCard
+          title="Telemetry Source Health"
+          value={postureLoading ? '...' : `${healthyTelemetrySources}/${totalTelemetrySources}`}
+          caption="Healthy / total sources"
+          accent={healthyTelemetrySources === totalTelemetrySources ? 'green' : 'purple'}
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Matched Vulnerabilities"
+          value={postureLoading ? '...' : vulnerabilityMatches.length}
+          caption={`${highRiskVulnerabilityMatches} high-risk inventory match(es)`}
+          accent={highRiskVulnerabilityMatches > 0 ? 'pink' : 'green'}
+        />
+        <MetricCard
           title="Prometheus Status"
           value={postureLoading ? '...' : prometheusHealth?.status ?? 'unknown'}
           caption={prometheusHealth?.enabled ? 'Read-only connector' : 'Connector disabled'}
@@ -243,6 +298,33 @@ export function Overview({
           value={postureLoading ? '...' : prometheusNode?.node_exporter_present ? 'Node' : 'Limited'}
           caption={prometheusNode?.node_exporter_present ? `${prometheusNode.node_exporter_up_count} node exporter target(s)` : 'Node exporter not detected'}
           accent={prometheusNode?.node_exporter_present ? 'green' : 'purple'}
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Loki Status"
+          value={postureLoading ? '...' : lokiHealth?.status ?? 'unknown'}
+          caption={lokiHealth?.enabled ? 'Log Ingestion read-only' : 'Log Ingestion disabled'}
+          accent={lokiHealth?.healthy ? 'green' : lokiHealth?.enabled ? 'pink' : 'purple'}
+        />
+        <MetricCard
+          title="Log Coverage"
+          value={postureLoading ? '...' : lokiSources?.source_count ?? 0}
+          caption={(lokiSources?.missing_sources.length ?? 0) > 0 ? `${lokiSources?.missing_sources.length ?? 0} expected source(s) missing` : 'Expected sources covered'}
+          accent={(lokiSources?.missing_sources.length ?? 0) > 0 ? 'pink' : 'cyan'}
+        />
+        <MetricCard
+          title="Authentication Signals"
+          value={postureLoading ? '...' : lokiAuth?.event_count ?? 0}
+          caption={lokiAuth?.status ? `${lokiAuth.status} across ${lokiAuth.source_count} source(s)` : 'No authentication signals loaded'}
+          accent={(lokiAuth?.event_count ?? 0) >= 5 ? 'pink' : 'green'}
+        />
+        <MetricCard
+          title="Service Error Signals"
+          value={postureLoading ? '...' : lokiServiceErrors?.event_count ?? 0}
+          caption={lokiServiceErrors?.status ? `${lokiServiceErrors.status} across ${lokiServiceErrors.source_count} source(s)` : 'No service error signals loaded'}
+          accent={(lokiServiceErrors?.event_count ?? 0) >= 10 ? 'pink' : 'green'}
         />
       </div>
 
@@ -293,9 +375,9 @@ export function Overview({
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Panel title="Risky Assets" eyebrow="Risk by Asset">
-          <DataTable columns={riskyAssetColumns} rows={riskyAssets} getRowKey={(asset) => asset.asset_id} emptyText="No risky assets returned by the API." />
+          <DataTable columns={riskyAssetColumns} rows={visibleRiskyAssets} getRowKey={(asset) => asset.asset_id} emptyText="No risky assets returned by the API." />
         </Panel>
-        <Panel title="Top Open Findings" eyebrow="Prioritized">
+        <Panel title="Prioritized Findings" eyebrow="Top Open Findings">
           <DataTable columns={findingColumns} rows={topFindings.slice(0, 6)} getRowKey={(finding) => finding.id} emptyText="No open findings returned by the API." />
         </Panel>
       </div>
