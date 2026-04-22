@@ -1,0 +1,65 @@
+import type { ReactNode } from 'react';
+
+export interface DataColumn<T> {
+  key: string;
+  label: string;
+  render: (row: T) => ReactNode;
+}
+
+interface DataTableProps<T> {
+  columns: DataColumn<T>[];
+  rows: T[];
+  getRowKey: (row: T) => string;
+  emptyText: string;
+  onRowClick?: (row: T) => void;
+}
+
+export function DataTable<T>({ columns, rows, getRowKey, emptyText, onRowClick }: DataTableProps<T>) {
+  return (
+    <div className="theme-inset overflow-hidden rounded-2xl border">
+      <div className="overflow-x-auto">
+        <table className="min-w-full">
+          <thead style={{ background: 'var(--table-head)' }}>
+            <tr>
+              {columns.map((column) => (
+                <th key={column.key} className="theme-text-faint border-b px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.18em]" style={{ borderColor: 'var(--border)' }}>
+                  {column.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="theme-text-faint px-4 py-12 text-center text-sm">
+                  {emptyText}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => (
+                <tr
+                  key={getRowKey(row)}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  className={`border-b transition duration-200 ${onRowClick ? 'cursor-pointer' : ''}`}
+                  style={{ borderColor: 'var(--table-row)' }}
+                  onMouseEnter={(event) => {
+                    event.currentTarget.style.background = 'var(--table-hover)';
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  {columns.map((column) => (
+                    <td key={column.key} className="theme-text-secondary whitespace-nowrap px-4 py-4 text-sm">
+                      {column.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
