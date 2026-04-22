@@ -1,433 +1,76 @@
-# PurpleClaw
+<p align="center">
+  <img src="frontend/public/logo/PURPLECLAW-DARK.svg" width="120"/>
+</p>
 
-An open-source AI-assisted purple-team validation platform.
+<h1 align="center">PurpleClaw</h1>
 
-## Quick Start
+<p align="center">
+  <b>SOC + NOC Security Validation Platform</b><br/>
+  Detect • Score • Prioritize • Act
+</p>
 
-From the repository root:
+<p align="center">
+  <img src="https://img.shields.io/badge/backend-FastAPI-009688" />
+  <img src="https://img.shields.io/badge/frontend-React-61DAFB" />
+  <img src="https://img.shields.io/badge/database-SQLite-blue" />
+  <img src="https://img.shields.io/badge/docker-ready-blue" />
+</p>
 
-```bash
-make backend
-```
-
-Starts the FastAPI backend from `backend/` at `http://127.0.0.1:8000`.
-
-```bash
-make frontend
-```
-
-Starts the Vite React frontend from `frontend/` at `http://127.0.0.1:5173`.
-
-```bash
-make dev
-```
-
-Starts both backend and frontend in one terminal. Press `Ctrl+C` to stop both.
-
-```bash
-make build
-```
-
-Runs the backend syntax check and frontend production build.
-
-## Persistence
-
-PurpleClaw still supports seeded demo data for local review. Tracking-mode records persist to an embedded SQLite database by default, so no external database is required for local use.
-
-Default SQLite database path:
-
-```text
-backend/data/purpleclaw.db
-```
-
-The backend creates `backend/data/` and the SQLite tables automatically on startup. Local `.db` files are ignored by git.
-
-For advanced deployments, set `DATABASE_URL` to use PostgreSQL instead:
-
-```bash
-cd backend
-cp .env.example .env
-```
-
-Example connection string:
-
-```text
-DATABASE_URL=postgresql://purpleclaw:purpleclaw@127.0.0.1:5432/purpleclaw
-```
-
-The backend initializes simple JSON-backed tables for core platform records on startup:
-
-- environments
-- assets
-- findings
-- remediations
-- inventory
-- telemetry summaries
-- automation runs
-- alerts
-- signals
-- intelligence update runs
-
-Database backend selection:
-
-- `DATABASE_URL` unset: embedded SQLite is used.
-- `DATABASE_URL` set: PostgreSQL is used.
-
-Platform health and SQLite backup routes:
-
-| Method | Route | Description |
-| --- | --- | --- |
-| `GET` | `/platform/health` | Returns API status, database backend, SQLite path, connection and writable status, scheduler status, environment count, database size, and record counts. |
-| `POST` | `/platform/backup` | Creates an explicit SQLite backup under `backend/data/backups/` and keeps the newest 10 backups. |
-| `GET` | `/platform/backups` | Lists available SQLite backups. |
-| `POST` | `/platform/restore` | Restores the embedded SQLite database from an explicit backup filename. |
-
-## Safe Scheduler
-
-PurpleClaw includes a basic in-process scheduler facade for safe defensive automation. It does not execute arbitrary commands or offensive tooling. The scheduler currently exposes manual run-now controls and next-run estimates for:
-
-- tracking cycle
-- intelligence update
-- inventory match
-
-Scheduler API routes:
-
-| Method | Route | Description |
-| --- | --- | --- |
-| `GET` | `/scheduler/status` | Returns scheduler job status, last run times, and next run estimates. |
-| `POST` | `/scheduler/run/tracking` | Runs the safe tracking cycle now. |
-| `POST` | `/scheduler/run/intelligence` | Runs the curated intelligence update now. |
-| `POST` | `/scheduler/run/inventory` | Runs seeded inventory-to-CVE matching now. |
+---
 
 ## Overview
+PurpleClaw is a security validation platform that combines SOC + NOC visibility to identify vulnerabilities, misconfigurations, and risks across systems.
 
-PurpleClaw is a FastAPI backend for defining, validating, and safely simulating purple-team exercise plans. The current implementation focuses on the control plane: typed exercise plan intake, safety validation, audit metadata, structured logs, safe stub execution, and in-memory visibility into submitted plans and execution results.
+It is designed to help you understand:
+- what is wrong
+- how bad it is
+- what should be fixed first
+- which assets are riskiest
 
-The backend does not run real attack commands. Execution is intentionally stubbed so plans can be validated end-to-end without performing destructive or operational activity.
+---
 
-FastAPI also exposes generated OpenAPI documentation at `/docs` and the OpenAPI schema at `/openapi.json`.
+## Capabilities
 
-## Current Features
+- Collects telemetry (Prometheus)
+- Detects:
+  - vulnerabilities
+  - misconfigurations
+  - exposure risks
+- Assigns risk scores (0–100)
+- Prioritizes findings automatically
 
-- FastAPI API with typed request and response models.
-- `ExercisePlan` validation using Pydantic schemas and planner safety checks.
-- Safe stub execution through executor implementations that do not run commands.
-- In-memory persistence for validated plans and stub execution results.
-- Audit metadata on plans and execution results, including creation and update timestamps.
-- Structured single-line logging for validation and execution events.
-- OpenAPI documentation generated by FastAPI.
+---
 
-## API Endpoints
-
-| Method | Route | Description |
-| --- | --- | --- |
-| `GET` | `/` | Returns basic service information. |
-| `GET` | `/health` | Returns API health status. |
-| `POST` | `/validate-plan` | Validates an `ExercisePlan` and stores it when valid. |
-| `POST` | `/execute-stub` | Validates an `ExercisePlan`, performs safe stub execution, stores the plan, and stores the execution result. |
-| `GET` | `/plans` | Returns all persisted exercise plans from memory. |
-| `GET` | `/executions` | Returns all persisted stub execution results from memory. |
-
-## Project Structure
-
-- `backend/main.py` - FastAPI application, route definitions, structured logging, and API orchestration.
-- `backend/planner/` - Exercise plan schemas and validation rules.
-- `backend/executor/` - Safe executor interfaces, registry, models, and stub implementations.
-- `backend/persistence/` - In-memory storage for plans and execution results.
-- `backend/posture/` - Posture domain models for assets, findings, remediation, telemetry, and automation.
-- `backend/gateway/` - Integration and orchestration glue.
-- `backend/collectors/` - Telemetry and detection connector namespace.
-- `frontend/src/` - React, Vite, TypeScript, TailwindCSS, Recharts, and Axios dashboard UI.
-- `frontend/public/` - Static logo and favicon assets.
-- `docs/` - Project documentation.
-- `backend/test_api.sh` - End-to-end curl smoke test for the current API routes.
-
-## Example Workflow
-
-1. Start the FastAPI application.
-2. Start the React dashboard.
-3. Submit an exercise plan through the Validator page or `/validate-plan`.
-4. Confirm the response returns `valid: true`.
-5. Execute the same plan through the stub simulator or `/execute-stub`.
-6. Confirm the response includes an `execution_id` and `executed: false`.
-7. Review persisted plans through the Plans page or `/plans`.
-8. Review persisted stub execution results through the Executions page or `/executions`.
-9. Check backend logs for structured validation and execution events.
-
-## Running Locally
-
-Root-level workflow:
-
-| Command | Description |
-| --- | --- |
-| `make backend` | Runs the FastAPI app from `backend/`. |
-| `make frontend` | Runs the Vite dashboard from `frontend/`. |
-| `make dev` | Runs backend and frontend together in one terminal. |
-| `make build` | Runs `python3 -m py_compile main.py` in `backend/` and `pnpm build` in `frontend/`. |
-| `make clean` | Removes generated frontend builds, TypeScript build info, Python bytecode, and `__pycache__` directories. |
-
-Backend requirements:
-
-- Python 3.11+
-
-Install backend dependencies:
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Run the API:
-
-```bash
-cd backend
-python -m uvicorn main:app --reload
-```
-
-The API defaults to:
+## Architecture
 
 ```text
-http://127.0.0.1:8000
+Frontend (UI)
+      │
+      ▼
+Backend (FastAPI)
+      │
+      ▼
+Detection + Scoring Engine
+      │
+      ▼
+Telemetry (Prometheus)
+      │
+      ▼
+SQLite Database
 ```
 
-OpenAPI documentation is available at:
+---
 
-```text
-http://127.0.0.1:8000/docs
-```
-
-Frontend requirements:
-
-- pnpm
-
-Install frontend dependencies:
+🚀 6. Make “Run” Section Look Premium
+## Run
 
 ```bash
-cd frontend
-pnpm install
+docker compose up --build -d
 ```
 
-Run the dashboard:
+- Service	URL
 
-```bash
-cd frontend
-pnpm run dev
-```
+```UI	http://localhost:8080```
 
-The dashboard defaults to:
+```API	http://localhost:8000/docs```
 
-```text
-http://127.0.0.1:5173
-```
-
-During development, Vite proxies `/api` requests to the backend at `http://127.0.0.1:8000`.
-
-## Testing
-
-Run the end-to-end curl smoke test:
-
-```bash
-cd backend
-BASE_URL=http://127.0.0.1:8000 ./test_api.sh
-```
-
-The script tests:
-
-- `POST /validate-plan`
-- `POST /execute-stub`
-- `GET /plans`
-- `GET /executions`
-
-It pretty-prints JSON with `jq` when available and falls back to raw output when `jq` is not installed. The script fails if any tested route returns a non-`200` HTTP status.
-
-Build the frontend:
-
-```bash
-cd frontend
-pnpm run build
-```
-
-## Example Output
-
-Example valid request payload:
-
-```json
-{
-  "id": "plan-1",
-  "name": "Test Plan",
-  "description": "Basic validation test",
-  "environment": "endpoint",
-  "scope": {
-    "allowed_targets": ["lab-node-1"],
-    "blocked_targets": [],
-    "max_execution_time": 300
-  },
-  "techniques": [
-    {
-      "id": "T1059",
-      "name": "Command and Scripting Interpreter",
-      "description": "Technique example"
-    }
-  ],
-  "execution_steps": [
-    {
-      "step_id": "step-1",
-      "description": "Safe stubbed validation step",
-      "executor": "custom",
-      "command_reference": "ref-safe-001",
-      "safe": true
-    }
-  ],
-  "expected_telemetry": [
-    {
-      "source": "sysmon",
-      "event_type": "process_create",
-      "description": "Expected process creation event"
-    }
-  ],
-  "expected_detections": [
-    {
-      "detection_name": "Suspicious Process Execution",
-      "data_source": "sysmon",
-      "severity": "medium",
-      "description": "Example detection expectation"
-    }
-  ],
-  "rollback_steps": [
-    {
-      "step_id": "rb-1",
-      "action": "No-op cleanup"
-    }
-  ],
-  "risk_level": "low",
-  "requires_approval": false
-}
-```
-
-Successful `/validate-plan` response:
-
-```json
-{
-  "valid": true,
-  "errors": []
-}
-```
-
-Successful `/execute-stub` response:
-
-```json
-{
-  "execution_id": "a335412a-7d4a-4f0f-94d6-0c62a5d337cc",
-  "created_at": "2026-04-20T07:20:45.976471Z",
-  "executed_at": "2026-04-20T07:20:45.976471Z",
-  "status": "stub",
-  "executor": "custom",
-  "message": "Custom executor stub did not run any commands.",
-  "plan_id": "plan-1",
-  "executed": false
-}
-```
-
-Successful `/plans` response:
-
-```json
-[
-  {
-    "id": "plan-1",
-    "created_at": "2026-04-20T07:20:45.947703Z",
-    "updated_at": "2026-04-20T07:20:45.976439Z",
-    "name": "Test Plan",
-    "description": "Basic validation test",
-    "environment": "endpoint",
-    "scope": {
-      "allowed_targets": ["lab-node-1"],
-      "blocked_targets": [],
-      "max_execution_time": 300
-    },
-    "techniques": [
-      {
-        "id": "T1059",
-        "name": "Command and Scripting Interpreter",
-        "description": "Technique example"
-      }
-    ],
-    "execution_steps": [
-      {
-        "step_id": "step-1",
-        "description": "Safe stubbed validation step",
-        "executor": "custom",
-        "command_reference": "ref-safe-001",
-        "safe": true
-      }
-    ],
-    "expected_telemetry": [
-      {
-        "source": "sysmon",
-        "event_type": "process_create",
-        "description": "Expected process creation event"
-      }
-    ],
-    "expected_detections": [
-      {
-        "detection_name": "Suspicious Process Execution",
-        "data_source": "sysmon",
-        "severity": "medium",
-        "description": "Example detection expectation"
-      }
-    ],
-    "rollback_steps": [
-      {
-        "step_id": "rb-1",
-        "action": "No-op cleanup"
-      }
-    ],
-    "risk_level": "low",
-    "requires_approval": false
-  }
-]
-```
-
-Successful `/executions` response:
-
-```json
-[
-  {
-    "execution_id": "a335412a-7d4a-4f0f-94d6-0c62a5d337cc",
-    "created_at": "2026-04-20T07:20:45.976471Z",
-    "executed_at": "2026-04-20T07:20:45.976471Z",
-    "status": "stub",
-    "executor": "custom",
-    "message": "Custom executor stub did not run any commands.",
-    "plan_id": "plan-1",
-    "executed": false
-  }
-]
-```
-
-Example structured logs:
-
-```text
-event=validate_plan plan_id=plan-1 valid=true errors_count=0
-event=execute_plan plan_id=plan-1 executor=custom execution_id=a335412a-7d4a-4f0f-94d6-0c62a5d337cc valid=true
-```
-
-## Current Limitations
-
-- Execution is stubbed and intentionally does not run real attack commands.
-- Persistence is in memory, so plans and execution results are lost when the process restarts.
-- Authentication and authorization are not implemented.
-- Approval workflows and policy enforcement are limited to the current validation rules.
-- Telemetry collection and detection integrations are represented by schema fields and project structure, not live connectors.
-- Reporting and UI directories are placeholders for future implementation.
-
-## Next Steps
-
-- Add durable persistence for plans and execution results.
-- Add authentication, authorization, and approval workflows.
-- Expand policy checks for scopes, risk tiers, and executor allowlists.
-- Add safe integrations for telemetry collectors and detection platforms.
-- Add automated tests around validation, persistence, and route behavior.
-- Build reporting outputs for validated plans and stub execution results.
-- Add a user interface for authoring, validating, and reviewing exercise plans.
