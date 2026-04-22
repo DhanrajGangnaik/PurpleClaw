@@ -1,0 +1,45 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: purpleclaw-backend
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      SQLITE_PATH: /app/data/purpleclaw.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+    restart: unless-stopped
+    networks:
+      - purpleclaw-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/platform/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: purpleclaw-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - purpleclaw-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+networks:
+  purpleclaw-net:
+    driver: bridge
