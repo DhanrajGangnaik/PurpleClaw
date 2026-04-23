@@ -108,6 +108,26 @@ class PostgresStore:
                 cursor.execute(sql, params)
                 return [model.model_validate(row[0]) for row in cursor.fetchall()]
 
+    def delete_record(self, table_name: str, record_id: str) -> None:
+        if not self.enabled:
+            return
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"DELETE FROM {table_name} WHERE id = %s", (record_id,))
+            connection.commit()
+
+    def purge_environment(self, environment_id: str, *, keep_tables: set[str] | None = None) -> None:
+        if not self.enabled:
+            return
+        protected_tables = keep_tables or set()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                for table_name in ENTITY_TABLES:
+                    if table_name in protected_tables:
+                        continue
+                    cursor.execute(f"DELETE FROM {table_name} WHERE environment_id = %s", (environment_id,))
+            connection.commit()
+
     def platform_health(self, scheduler_status: dict[str, object], environment_count: int) -> dict[str, object]:
         status = self.status()
         status.update(

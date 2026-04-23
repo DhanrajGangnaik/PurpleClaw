@@ -17,6 +17,309 @@ export interface ManagedEnvironment {
   updated_at: string;
 }
 
+export interface EnvironmentCreateRequest {
+  name: string;
+  type: ManagedEnvironmentType;
+  description: string;
+  status: ManagedEnvironmentStatus;
+}
+
+export interface EnvironmentUpdateRequest {
+  name: string;
+  type: ManagedEnvironmentType;
+  description: string;
+  status: ManagedEnvironmentStatus;
+}
+
+export interface RegisteredDataSource {
+  datasource_id: string;
+  environment_id: string;
+  name: string;
+  type: 'prometheus' | 'loki' | 'file' | 'api' | 'inventory' | 'scanner_results';
+  status: 'enabled' | 'disabled' | 'error';
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  last_tested_at: string | null;
+  ingestion_enabled: boolean;
+  ingestion_interval_seconds: number | null;
+}
+
+export interface DataSourceCreateRequest {
+  environment_id: string;
+  name: string;
+  type: RegisteredDataSource['type'];
+  status: RegisteredDataSource['status'];
+  config: Record<string, unknown>;
+}
+
+export interface DataSourceTestRequest {
+  environment_id: string;
+  type: RegisteredDataSource['type'];
+  config: Record<string, unknown>;
+}
+
+export interface DataSourceTestResult {
+  ok: boolean;
+  status: RegisteredDataSource['status'];
+  message: string;
+  checked_at: string;
+}
+
+export interface DataSourceScheduleRequest {
+  trigger_mode: 'manual' | 'interval';
+  interval_seconds: number | null;
+  enabled: boolean;
+}
+
+export interface DatasourceIngestionJob {
+  job_id: string;
+  datasource_id: string;
+  environment_id: string;
+  status: 'scheduled' | 'running' | 'completed' | 'failed' | 'disabled';
+  trigger_mode: 'manual' | 'interval';
+  interval_seconds: number | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_status_message: string | null;
+  records_ingested: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataRecord {
+  record_id: string;
+  environment_id: string;
+  datasource_id: string;
+  record_type: string;
+  metric: string;
+  value: number | string | boolean | null;
+  dimensions: Record<string, unknown>;
+  tags: string[];
+  observed_at: string;
+}
+
+export interface PaginatedDataRecords {
+  items: DataRecord[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface DashboardConfig {
+  dashboard_id: string;
+  environment_id: string;
+  name: string;
+  description: string | null;
+  layout: Record<string, unknown>;
+  widgets: Array<Record<string, unknown>>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RenderedDashboard {
+  dashboard_id: string;
+  environment_id: string;
+  name: string;
+  description: string | null;
+  layout: Record<string, unknown>;
+  widgets: RenderedWidget[];
+  rendered_at: string;
+  datasource_count: number;
+  data_freshness: {
+    status: 'fresh' | 'stale';
+    latest_observed_at: string | null;
+    record_count: number;
+  };
+}
+
+export interface DashboardSaveRequest {
+  environment_id: string;
+  name: string;
+  description: string | null;
+  layout: Record<string, unknown>;
+  widgets: Array<Record<string, unknown>>;
+}
+
+export interface WidgetBase {
+  widget_id?: string;
+  type: string;
+  title?: string;
+  freshness?: 'fresh' | 'stale';
+  last_updated?: string | null;
+}
+
+export interface MetricCardWidgetPayload extends WidgetBase {
+  type: 'metric_card';
+  data: {
+    value: string | number;
+    caption?: string;
+    source?: string;
+  };
+}
+
+export interface FindingsTableWidgetPayload extends WidgetBase {
+  type: 'findings_table';
+  data: Finding[];
+}
+
+export interface RiskyAssetsWidgetPayload extends WidgetBase {
+  type: 'risky_assets';
+  data: RiskByAsset[];
+}
+
+export interface TelemetrySummaryWidgetPayload extends WidgetBase {
+  type: 'telemetry_summary';
+  data: {
+    summaries: TelemetrySummary[];
+    pipeline: Record<string, unknown>;
+  };
+}
+
+export interface VulnerabilitiesSummaryWidgetPayload extends WidgetBase {
+  type: 'vulnerabilities_summary';
+  data: {
+    total: number;
+    severity_distribution: Record<string, number>;
+    matches: Finding[];
+  };
+}
+
+export interface ServiceHealthWidgetPayload extends WidgetBase {
+  type: 'service_health';
+  data: ServiceHealth[];
+}
+
+export interface ReportListWidgetPayload extends WidgetBase {
+  type: 'report_list';
+  data: Report[];
+}
+
+export interface GenericSummaryWidgetPayload extends WidgetBase {
+  type: 'alerts_summary' | 'signals_summary';
+  data: Record<string, unknown>;
+}
+
+export interface UnsupportedWidgetPayload extends WidgetBase {
+  type: string;
+  data: Record<string, unknown>;
+}
+
+export type RenderedWidget =
+  | MetricCardWidgetPayload
+  | FindingsTableWidgetPayload
+  | RiskyAssetsWidgetPayload
+  | TelemetrySummaryWidgetPayload
+  | VulnerabilitiesSummaryWidgetPayload
+  | ServiceHealthWidgetPayload
+  | ReportListWidgetPayload
+  | GenericSummaryWidgetPayload
+  | UnsupportedWidgetPayload;
+
+export interface ScanPolicy {
+  policy_id: string;
+  environment_id: string;
+  name: string;
+  allowed_targets: string[];
+  allowed_network_ranges: string[];
+  allowed_scan_types: string[];
+  max_depth: 'light' | 'standard';
+  enabled: boolean;
+}
+
+export interface ScanPolicyCreateRequest {
+  environment_id: string;
+  name: string;
+  allowed_targets: string[];
+  allowed_network_ranges: string[];
+  allowed_scan_types: string[];
+  max_depth: 'light' | 'standard';
+  enabled: boolean;
+}
+
+export interface ScanRequestRecord {
+  scan_id: string;
+  environment_id: string;
+  target: string;
+  target_type: 'asset' | 'hostname' | 'ip' | 'service';
+  scan_types: string[];
+  depth: 'light' | 'standard';
+  requested_at: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'blocked';
+  requested_by: string | null;
+  notes: string | null;
+}
+
+export interface ScanRunRequest {
+  environment_id: string;
+  target: string;
+  target_type: ScanRequestRecord['target_type'];
+  scan_types: string[];
+  depth: ScanRequestRecord['depth'];
+  requested_by: string | null;
+  notes: string | null;
+}
+
+export interface ScanResultRecord {
+  scan_id: string;
+  environment_id: string;
+  target: string;
+  findings_created: number;
+  summary: Record<string, unknown>;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+}
+
+export interface ScanFindingSummary {
+  title: string;
+  severity: string;
+  score: number;
+  category: string;
+  evidence_summary: string;
+  target?: string;
+}
+
+export interface ScanDetail {
+  request: ScanRequestRecord;
+  result: ScanResultRecord | null;
+  related_findings: Array<{
+    id: string;
+    title: string;
+    severity: string;
+    score: number;
+    status: string;
+  }>;
+}
+
+export interface ReportTemplate {
+  template_id: string;
+  name: string;
+  description: string;
+  sections: string[];
+}
+
+export interface ReportPreviewSection {
+  name: string;
+  content: Record<string, unknown>;
+}
+
+export interface ReportPreview {
+  title: string;
+  environment_id: string;
+  generated_from: 'dashboard' | 'findings' | 'scan' | 'environment_summary';
+  sections: ReportPreviewSection[];
+  metadata: Record<string, unknown>;
+}
+
+export interface GenerateReportRequest {
+  environment_id: string;
+  title: string;
+  generated_from: 'dashboard' | 'findings' | 'scan' | 'environment_summary';
+  source_id: string | null;
+  template_id: string | null;
+}
+
 export interface ScopePolicy {
   allowed_targets: string[];
   blocked_targets: string[];
@@ -195,6 +498,7 @@ export interface SchedulerStatus {
   enabled: boolean;
   mode: string;
   jobs: Record<'tracking' | 'intelligence' | 'inventory', SchedulerJobStatus>;
+  datasource_ingestion?: Record<string, { interval_seconds: number; last_run_at: string | null; next_run_at: string | null; last_status: string }>;
 }
 
 export interface PlatformHealth {
@@ -317,14 +621,15 @@ export interface Policy {
 }
 
 export interface Report {
-  id: string;
+  report_id: string;
+  environment_id: string;
   title: string;
-  report_type: string;
-  period: string;
   generated_at: string;
-  summary: string;
-  key_metrics: Record<string, number | string>;
-  source: DataSource;
+  generated_from: 'dashboard' | 'findings' | 'scan' | 'environment_summary';
+  source_id: string | null;
+  status: 'ready' | 'failed';
+  file_path: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export interface TelemetrySummary {

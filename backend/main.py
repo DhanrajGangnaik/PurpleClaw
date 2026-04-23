@@ -1,11 +1,34 @@
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Union
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from collectors.loki import get_loki_config, get_loki_health
 from collectors.prometheus import get_prometheus_config, get_prometheus_health
+from dashboards.runtime import render_dashboard
+from dashboards import Dashboard, DashboardCreate, DashboardUpdate, get_dashboard, initialize_dashboards, list_dashboards, save_dashboard, update_dashboard
+from datasources import (
+    DataSource,
+    DataSourceCreate,
+    DataSourceScheduleRequest,
+    DataSourceTestRequest,
+    DataSourceTestResult,
+    get_datasource,
+    ingest_environment_datasources,
+    initialize_datasources,
+    list_datasources,
+    save_datasource,
+    test_datasource_connection,
+)
+from datasources.pipeline import QuerySpec, initialize_pipeline, query_data
+from datasources.pipeline import list_records_paginated
+from datasources.jobs import DatasourceIngestionJob, get_job, list_jobs
+from datasources.jobs.bootstrap import initialize_ingestion_runtime
+from datasources.jobs.runtime import disable_datasource_ingestion, run_ingestion_job, schedule_datasource_ingestion
 from executor import get_executor
 from executor.models import ExecutionResult
 from intelligence.store import (
@@ -17,6 +40,8 @@ from intelligence.store import (
     run_update as run_intelligence_update,
 )
 from persistence import (
+    create_environment,
+    delete_environment,
     derive_findings,
     discover_assets,
     findings_count_by_severity,
@@ -44,7 +69,6 @@ from persistence import (
     list_policies,
     list_remediations,
     list_remediations_for_finding,
-    list_reports,
     list_telemetry_source_health,
     list_telemetry_summaries,
     list_vulnerability_matches,
@@ -57,6 +81,7 @@ from persistence import (
     run_inventory_match,
     save_execution_result,
     save_plan,
+    update_environment,
 )
 from planner import ValidationResult, validate_exercise_plan
 from planner.schemas import ExercisePlan
@@ -70,7 +95,6 @@ from posture.models import (
     IncidentSummary,
     InventoryRecord,
     Policy,
-    Report,
     RemediationTask,
     RiskByAsset,
     SecuritySignal,
@@ -78,12 +102,40 @@ from posture.models import (
     SystemMode,
     TelemetrySourceHealth,
 )
+from reports import GenerateReportRequest, GeneratedReport, ReportTemplate, generate_report, get_report, initialize_reports, list_report_templates, list_reports, preview_report
+from scanning import (
+    ScanDetail,
+    ScanPolicy,
+    ScanPolicyCreate,
+    ScanRunRequest,
+    enqueue_scan,
+    get_scan_detail,
+    initialize_execution_engine,
+    initialize_scanning,
+    list_scan_policies,
+    list_scans,
+    save_scan_policy,
+)
 from scheduler import scheduler
 from persistence.database import db
 
 
 class RestoreRequest(BaseModel):
     filename: str
+
+
+class EnvironmentCreateRequest(BaseModel):
+    name: str
+    type: str
+    description: str
+    status: str = "active"
+
+
+class EnvironmentUpdateRequest(BaseModel):
+    name: str
+    type: str
+    description: str
+    status: str
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -98,6 +150,14 @@ app = FastAPI(
 @app.on_event("startup")
 def startup() -> None:
     persistence_status = initialize_persistence()
+    initialize_pipeline()
+    initialize_datasources()
+    initialize_ingestion_runtime()
+    initialize_dashboards()
+    initialize_scanning()
+    initialize_execution_engine()
+    initialize_reports()
+    scheduler.start()
     logger.info(
         "event=startup persistence_configured=%s persistence_enabled=%s",
         str(persistence_status["configured"]).lower(),
@@ -178,6 +238,20 @@ def environments() -> list[Environment]:
     return records
 
 
+@app.post("/environments", response_model=Environment, status_code=201)
+def environment_create(payload: EnvironmentCreateRequest) -> Environment:
+    """Create one managed PurpleClaw environment."""
+
+    record = create_environment(
+        name=payload.name,
+        environment_type=payload.type,
+        description=payload.description,
+        status=payload.status,
+    )
+    logger.info("event=create_environment environment_id=%s", record.environment_id)
+    return record
+
+
 @app.get("/environments/{environment_id}", response_model=Environment)
 def environment(environment_id: str) -> Environment:
     """Return one configured PurpleClaw environment."""
@@ -186,6 +260,35 @@ def environment(environment_id: str) -> Environment:
         raise HTTPException(status_code=404, detail="Environment not found")
     logger.info("event=get_environment environment_id=%s", environment_id)
     return record
+
+
+@app.put("/environments/{environment_id}", response_model=Environment)
+def environment_update(environment_id: str, payload: EnvironmentUpdateRequest) -> Environment:
+    """Update one managed PurpleClaw environment."""
+
+    record = update_environment(
+        environment_id=environment_id,
+        name=payload.name,
+        environment_type=payload.type,
+        description=payload.description,
+        status=payload.status,
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    logger.info("event=update_environment environment_id=%s", environment_id)
+    return record
+
+
+@app.delete("/environments/{environment_id}", status_code=204)
+def environment_delete(environment_id: str) -> None:
+    """Delete one managed PurpleClaw environment."""
+
+    record = get_environment(environment_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    if not delete_environment(environment_id):
+        raise HTTPException(status_code=400, detail="At least one environment must remain")
+    logger.info("event=delete_environment environment_id=%s", environment_id)
 
 
 @app.get("/integrations/prometheus/config")
@@ -449,12 +552,285 @@ def policies() -> list[Policy]:
     return records
 
 
-@app.get("/reports", response_model=list[Report])
-def reports() -> list[Report]:
+@app.get("/reports", response_model=list[GeneratedReport])
+def reports(environment_id: str | None = Query(default=None)) -> list[GeneratedReport]:
     """Return generated posture reports."""
-    records = list_reports()
-    logger.info("event=list_reports count=%d", len(records))
+    records = list_reports(environment_id)
+    logger.info("event=list_reports environment_id=%s count=%d", environment_id or "all", len(records))
     return records
+
+
+@app.get("/report-templates", response_model=list[ReportTemplate])
+def report_templates() -> list[ReportTemplate]:
+    records = list_report_templates()
+    logger.info("event=list_report_templates count=%d", len(records))
+    return records
+
+
+@app.post("/reports/generate", response_model=GeneratedReport)
+def reports_generate(request: GenerateReportRequest) -> GeneratedReport:
+    try:
+        report = generate_report(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=generate_report report_id=%s environment_id=%s status=%s", report.report_id, report.environment_id, report.status)
+    return report
+
+
+@app.post("/reports/preview")
+def reports_preview(request: GenerateReportRequest) -> dict[str, object]:
+    try:
+        payload = preview_report(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=preview_report environment_id=%s generated_from=%s", request.environment_id, request.generated_from)
+    return payload
+
+
+@app.get("/reports/{report_id}", response_model=GeneratedReport)
+def report_detail(report_id: str) -> GeneratedReport:
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    logger.info("event=get_report report_id=%s", report_id)
+    return report
+
+
+@app.get("/reports/{report_id}/download")
+def report_download(report_id: str) -> FileResponse:
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report.status != "ready" or not report.file_path:
+        raise HTTPException(status_code=400, detail="Report file is not available")
+    file_path = Path(report.file_path).resolve()
+    reports_dir = (Path(__file__).resolve().parent / "data" / "reports").resolve()
+    if reports_dir not in file_path.parents or not file_path.exists():
+        raise HTTPException(status_code=400, detail="Invalid report path")
+    logger.info("event=download_report report_id=%s", report_id)
+    return FileResponse(path=file_path, media_type="application/pdf", filename=file_path.name)
+
+
+@app.post("/datasources", response_model=DataSource)
+def create_datasource(request: DataSourceCreate) -> DataSource:
+    try:
+        record = save_datasource(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=create_datasource datasource_id=%s environment_id=%s type=%s", record.datasource_id, record.environment_id, record.type)
+    return record
+
+
+@app.get("/datasources", response_model=list[DataSource])
+def datasources(environment_id: str | None = Query(default=None)) -> list[DataSource]:
+    if environment_id:
+        ingest_environment_datasources(environment_id)
+    records = list_datasources(environment_id)
+    logger.info("event=list_datasources environment_id=%s count=%d", environment_id or "all", len(records))
+    return records
+
+
+@app.get("/datasources/jobs", response_model=list[DatasourceIngestionJob])
+def datasource_jobs(environment_id: str | None = Query(default=None)) -> list[DatasourceIngestionJob]:
+    records = list_jobs(environment_id)
+    logger.info("event=list_datasource_jobs environment_id=%s count=%d", environment_id or "all", len(records))
+    return records
+
+
+@app.get("/datasources/jobs/{job_id}", response_model=DatasourceIngestionJob)
+def datasource_job_detail(job_id: str) -> DatasourceIngestionJob:
+    record = get_job(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Datasource ingestion job not found")
+    logger.info("event=get_datasource_job job_id=%s", job_id)
+    return record
+
+
+@app.get("/datasources/{datasource_id}", response_model=DataSource)
+def datasource_detail(datasource_id: str) -> DataSource:
+    record = get_datasource(datasource_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Data source not found")
+    logger.info("event=get_datasource datasource_id=%s", datasource_id)
+    return record
+
+
+@app.post("/datasources/test", response_model=DataSourceTestResult)
+def datasource_test(request: DataSourceTestRequest) -> DataSourceTestResult:
+    try:
+        result = test_datasource_connection(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=test_datasource environment_id=%s type=%s ok=%s", request.environment_id, request.type, str(result.ok).lower())
+    return result
+
+
+@app.post("/datasources/{datasource_id}/ingest", response_model=DatasourceIngestionJob)
+def datasource_ingest(datasource_id: str) -> DatasourceIngestionJob:
+    try:
+        record = run_ingestion_job(datasource_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=ingest_datasource datasource_id=%s status=%s records_ingested=%d", datasource_id, record.status, record.records_ingested)
+    return record
+
+
+@app.post("/datasources/{datasource_id}/schedule", response_model=DatasourceIngestionJob)
+def datasource_schedule_create(datasource_id: str, request: DataSourceScheduleRequest) -> DatasourceIngestionJob:
+    try:
+        record = schedule_datasource_ingestion(datasource_id, request.trigger_mode, request.interval_seconds, request.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=schedule_datasource datasource_id=%s trigger_mode=%s enabled=%s", datasource_id, request.trigger_mode, str(request.enabled).lower())
+    return record
+
+
+@app.put("/datasources/{datasource_id}/schedule", response_model=DatasourceIngestionJob)
+def datasource_schedule_update(datasource_id: str, request: DataSourceScheduleRequest) -> DatasourceIngestionJob:
+    try:
+        record = schedule_datasource_ingestion(datasource_id, request.trigger_mode, request.interval_seconds, request.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=update_datasource_schedule datasource_id=%s trigger_mode=%s enabled=%s", datasource_id, request.trigger_mode, str(request.enabled).lower())
+    return record
+
+
+@app.post("/datasources/{datasource_id}/schedule/disable", response_model=DatasourceIngestionJob)
+def datasource_schedule_disable(datasource_id: str) -> DatasourceIngestionJob:
+    try:
+        record = disable_datasource_ingestion(datasource_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=disable_datasource_schedule datasource_id=%s", datasource_id)
+    return record
+
+
+@app.get("/datasources/{datasource_id}/records")
+def datasource_records(
+    datasource_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    record_type: str | None = Query(default=None),
+    start_at: str | None = Query(default=None),
+    end_at: str | None = Query(default=None),
+) -> dict[str, object]:
+    datasource = get_datasource(datasource_id)
+    if datasource is None:
+        raise HTTPException(status_code=404, detail="Data source not found")
+    parsed_start_at = datetime.fromisoformat(start_at) if start_at else None
+    parsed_end_at = datetime.fromisoformat(end_at) if end_at else None
+    payload = list_records_paginated(
+        datasource.environment_id,
+        datasource_id,
+        record_type=record_type,
+        start_at=parsed_start_at,
+        end_at=parsed_end_at,
+        page=page,
+        page_size=page_size,
+    )
+    logger.info("event=list_datasource_records datasource_id=%s page=%d count=%d", datasource_id, page, len(payload["items"]))
+    return payload
+
+
+@app.post("/dashboards", response_model=Dashboard)
+def create_dashboard(request: DashboardCreate) -> Dashboard:
+    try:
+        record = save_dashboard(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=create_dashboard dashboard_id=%s environment_id=%s", record.dashboard_id, record.environment_id)
+    return record
+
+
+@app.get("/dashboards", response_model=list[Dashboard])
+def dashboards(environment_id: str | None = Query(default=None)) -> list[Dashboard]:
+    records = list_dashboards(environment_id)
+    logger.info("event=list_dashboards environment_id=%s count=%d", environment_id or "all", len(records))
+    return records
+
+
+@app.get("/dashboards/{dashboard_id}", response_model=Dashboard)
+def dashboard_detail(dashboard_id: str) -> Dashboard:
+    record = get_dashboard(dashboard_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    logger.info("event=get_dashboard dashboard_id=%s", dashboard_id)
+    return record
+
+
+@app.get("/dashboards/{dashboard_id}/render")
+def dashboard_render(dashboard_id: str) -> dict[str, object]:
+    rendered = render_dashboard(dashboard_id)
+    if rendered is None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    ingest_environment_datasources(str(rendered["environment_id"]))
+    rendered = render_dashboard(dashboard_id)
+    logger.info("event=render_dashboard dashboard_id=%s widgets=%d", dashboard_id, len(rendered["widgets"]))
+    return rendered
+
+
+@app.put("/dashboards/{dashboard_id}", response_model=Dashboard)
+def dashboard_update(dashboard_id: str, request: DashboardUpdate) -> Dashboard:
+    try:
+        record = update_dashboard(dashboard_id, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    logger.info("event=update_dashboard dashboard_id=%s", dashboard_id)
+    return record
+
+
+@app.get("/scan-policies", response_model=list[ScanPolicy])
+def scan_policies(environment_id: str | None = Query(default=None)) -> list[ScanPolicy]:
+    records = list_scan_policies(environment_id)
+    logger.info("event=list_scan_policies environment_id=%s count=%d", environment_id or "all", len(records))
+    return records
+
+
+@app.post("/scan-policies", response_model=ScanPolicy)
+def create_scan_policy(request: ScanPolicyCreate) -> ScanPolicy:
+    try:
+        record = save_scan_policy(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=create_scan_policy policy_id=%s environment_id=%s", record.policy_id, record.environment_id)
+    return record
+
+
+@app.get("/scans", response_model=list[ScanDetail])
+def scans(environment_id: str | None = Query(default=None)) -> list[ScanDetail]:
+    records = list_scans(environment_id)
+    logger.info("event=list_scans environment_id=%s count=%d", environment_id or "all", len(records))
+    return records
+
+
+@app.get("/scans/{scan_id}", response_model=ScanDetail)
+def scan_detail(scan_id: str) -> ScanDetail:
+    record = get_scan_detail(scan_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    logger.info("event=get_scan scan_id=%s", scan_id)
+    return record
+
+
+@app.post("/scans/run", response_model=ScanDetail)
+def scans_run(request: ScanRunRequest) -> ScanDetail:
+    try:
+        queued = enqueue_scan(request)
+        record = get_scan_detail(queued.scan_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("event=queue_scan scan_id=%s environment_id=%s status=%s", record.request.scan_id, record.request.environment_id, record.request.status)
+    return record
+
+
+@app.post("/data/query")
+def data_query(request: QuerySpec, environment_id: str = Query(...)) -> dict[str, object]:
+    ingest_environment_datasources(environment_id)
+    payload = query_data(environment_id, request)
+    logger.info("event=query_data environment_id=%s count=%s", environment_id, payload.get("count"))
+    return payload
 
 
 @app.get("/telemetry-summary")

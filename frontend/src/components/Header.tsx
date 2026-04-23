@@ -1,71 +1,40 @@
 import { useLocation } from 'react-router-dom';
+import { EnvironmentSwitcher } from './EnvironmentSwitcher';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import type { ManagedEnvironment } from '../types/api';
 
 const pageTitles: Record<string, { title: string; description: string }> = {
+  '/home': {
+    title: 'Workspace Home',
+    description: 'Use the homepage as the main entry point for switching environments and jumping into core workflows.',
+  },
   '/': {
-    title: 'Security Operations Overview',
-    description: 'Posture, findings, remediation, telemetry, and tracking status in one SOC workspace.',
+    title: 'Workspace Home',
+    description: 'Use the homepage as the main entry point for switching environments and jumping into core workflows.',
   },
-  '/plans': {
-    title: 'Validation Plans',
-    description: 'Review approved validation plans and expected defensive telemetry.',
+  '/dashboards': {
+    title: 'Dashboards',
+    description: 'Focused dashboards with fewer, higher-signal widgets and clearer grouping.',
   },
-  '/executions': {
-    title: 'Validation Results',
-    description: 'Inspect safe validation outcomes and posture verification records.',
+  '/datasources': {
+    title: 'Data Sources',
+    description: 'Configure ingestion and connector health without leaving the main workflow.',
   },
-  '/assets': {
-    title: 'Assets',
-    description: 'Review asset exposure, ownership, and posture signals.',
-  },
-  '/inventory': {
-    title: 'Inventory',
-    description: 'Review multi-environment asset ownership, exposure, and telemetry coverage.',
-  },
-  '/findings': {
-    title: 'Findings',
-    description: 'Prioritize defensive findings and verification evidence.',
-  },
-  '/remediation': {
-    title: 'Remediation',
-    description: 'Track remediation tasks and verification progress.',
-  },
-  '/policies': {
-    title: 'Policies',
-    description: 'Review defensive posture policies and control coverage.',
+  '/scans': {
+    title: 'Scans',
+    description: 'Run controlled assessments and review the most relevant scan output.',
   },
   '/reports': {
     title: 'Reports',
-    description: 'Inspect generated posture and telemetry reports.',
+    description: 'Generate concise reports and keep stakeholder output close to operations.',
   },
   '/alerts': {
     title: 'Alerts',
-    description: 'Review active SOC and NOC alerts across approved environments.',
+    description: 'Review active SOC and NOC alerts for the currently selected environment.',
   },
-  '/signals': {
-    title: 'Security Signals',
-    description: 'Aggregate correlation-ready SOC signals and investigation context.',
-  },
-  '/service-health': {
-    title: 'Service Health',
-    description: 'Track NOC service availability, latency, errors, and health status.',
-  },
-  '/dependencies': {
-    title: 'Dependencies',
-    description: 'Monitor platform dependencies and telemetry-backed status safely.',
-  },
-  '/scheduler': {
-    title: 'Operations',
-    description: 'Run scheduled safe automation jobs and review scheduler state.',
-  },
-  '/automation': {
-    title: 'Automation',
-    description: 'Run safe tracking cycles and review automation history.',
-  },
-  '/validator': {
-    title: 'Plan Validator',
-    description: 'Validate posture plans before recording safe verification results.',
+  '/settings': {
+    title: 'Settings',
+    description: 'Manage environments and tune the application shell.',
   },
 };
 
@@ -74,58 +43,66 @@ interface HeaderProps {
   environments: ManagedEnvironment[];
   selectedEnvironmentId: string;
   onEnvironmentChange: (environmentId: string) => void;
+  onCreateEnvironmentRequest: () => void;
+  onManageEnvironmentRequest: () => void;
+  onSidebarToggle: () => void;
 }
 
-export function Header({ apiStatus, environments, selectedEnvironmentId, onEnvironmentChange }: HeaderProps) {
+export function Header({
+  apiStatus,
+  environments,
+  selectedEnvironmentId,
+  onEnvironmentChange,
+  onCreateEnvironmentRequest,
+  onManageEnvironmentRequest,
+  onSidebarToggle,
+}: HeaderProps) {
   const location = useLocation();
   const copy = pageTitles[location.pathname] ?? pageTitles['/'];
-  const selectedEnvironment = environments.find((environment) => environment.environment_id === selectedEnvironmentId);
+  const selectedEnvironment = environments.find((environment) => environment.environment_id === selectedEnvironmentId) ?? environments[0];
 
   return (
     <header className="theme-surface-strong sticky top-0 z-10 border-b px-4 py-4 backdrop-blur-2xl sm:px-6 lg:px-8">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="max-w-3xl">
-          <p className="theme-brand text-xs font-semibold uppercase tracking-[0.2em]">PurpleClaw</p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onSidebarToggle}
+              className="theme-button-secondary inline-flex h-10 w-10 items-center justify-center rounded-2xl lg:hidden"
+              aria-label="Open navigation"
+            >
+              <span className="space-y-1">
+                <span className="block h-0.5 w-4 bg-current" />
+                <span className="block h-0.5 w-4 bg-current" />
+                <span className="block h-0.5 w-4 bg-current" />
+              </span>
+            </button>
+            <p className="theme-brand text-xs font-semibold uppercase tracking-[0.2em]">PurpleClaw</p>
+          </div>
           <h2 className="theme-text-primary mt-1 text-2xl font-semibold">{copy.title}</h2>
           <p className="theme-text-muted mt-1 text-sm">{copy.description}</p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-          <label className="theme-inset flex h-10 items-center gap-2 rounded-2xl border px-3">
-            <span className="theme-text-faint text-xs font-semibold uppercase tracking-[0.14em]">Env</span>
-            <select
-              value={selectedEnvironmentId}
-              onChange={(event) => onEnvironmentChange(event.target.value)}
-              className="theme-text-primary min-w-32 bg-transparent text-sm font-semibold outline-none"
-              aria-label="Select environment"
-            >
-              {environments.length ? (
-                environments.map((environment) => (
-                  <option key={environment.environment_id} value={environment.environment_id}>
-                    {environment.name}
-                  </option>
-                ))
-              ) : (
-                <option value={selectedEnvironmentId}>Homelab</option>
-              )}
-            </select>
-          </label>
-          <ThemeSwitcher />
-          <label className="relative block">
-            <span className="sr-only">Search dashboard</span>
-            <span className="theme-text-faint pointer-events-none absolute left-3 top-2.5 text-sm">/</span>
-            <input
-              className="theme-input theme-focus h-10 w-full rounded-2xl border pl-9 pr-4 text-sm transition sm:w-72"
-              placeholder="Search posture data..."
-              type="search"
+        <div className="flex flex-col gap-3 xl:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <EnvironmentSwitcher
+              environments={environments}
+              selectedEnvironmentId={selectedEnvironmentId}
+              onEnvironmentChange={onEnvironmentChange}
+              onCreateEnvironmentRequest={onCreateEnvironmentRequest}
+              onManageEnvironmentRequest={onManageEnvironmentRequest}
+              compact
             />
-          </label>
-          <div className="theme-inset flex items-center gap-3 rounded-2xl border px-3 py-2">
+            <ThemeSwitcher />
+          </div>
+
+          <div className="theme-inset flex items-center gap-3 self-start rounded-2xl border px-3 py-2 xl:self-end">
             <span className={`h-2.5 w-2.5 rounded-full ${apiStatus === 'online' ? 'bg-signal' : 'bg-rose-400'}`} />
             <span className="theme-text-secondary text-sm">API {apiStatus}</span>
-            <span className="theme-text-faint hidden text-xs uppercase tracking-[0.12em] sm:inline">{selectedEnvironment?.type ?? 'homelab'}</span>
-            <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-cyan-400 text-xs font-bold !text-white">
-              SOC
+            <span className="theme-text-faint hidden text-xs uppercase tracking-[0.12em] sm:inline">{selectedEnvironment?.type ?? 'lab'}</span>
+            <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-emerald-400 text-xs font-bold text-slate-950">
+              PC
             </div>
           </div>
         </div>

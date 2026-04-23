@@ -1,4 +1,6 @@
 from persistence.store import (
+    create_environment,
+    delete_environment,
     derive_findings,
     discover_assets,
     findings_count_by_severity,
@@ -41,10 +43,15 @@ from persistence.store import (
     run_inventory_match,
     save_inventory_record,
     save_execution_result,
+    save_tracking_finding,
+    save_tracking_findings,
     save_plan,
+    update_environment,
 )
 
 __all__ = [
+    "create_environment",
+    "delete_environment",
     "derive_findings",
     "discover_assets",
     "findings_count_by_severity",
@@ -87,5 +94,8 @@ __all__ = [
     "run_inventory_match",
     "save_inventory_record",
     "save_execution_result",
+    "save_tracking_finding",
+    "save_tracking_findings",
     "save_plan",
+    "update_environment",
 ]

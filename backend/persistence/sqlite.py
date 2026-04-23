@@ -104,6 +104,22 @@ class SQLiteStore:
                 rows = connection.execute(f"SELECT data FROM {table_name}").fetchall()
         return [model.model_validate(json.loads(row["data"])) for row in rows]
 
+    def delete_record(self, table_name: str, record_id: str) -> None:
+        with self._lock:
+            connection = self._connect()
+            with connection:
+                connection.execute(f"DELETE FROM {table_name} WHERE id = ?", (record_id,))
+
+    def purge_environment(self, environment_id: str, *, keep_tables: set[str] | None = None) -> None:
+        protected_tables = keep_tables or set()
+        with self._lock:
+            connection = self._connect()
+            with connection:
+                for table_name in ENTITY_TABLES:
+                    if table_name in protected_tables:
+                        continue
+                    connection.execute(f"DELETE FROM {table_name} WHERE environment_id = ?", (environment_id,))
+
     def platform_health(self, scheduler_status: dict[str, object], environment_count: int) -> dict[str, object]:
         status = self.status()
         status.update(

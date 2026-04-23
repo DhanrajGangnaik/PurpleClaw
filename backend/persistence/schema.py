@@ -15,6 +15,15 @@ ENTITY_TABLES = {
     "alerts": "alert_id",
     "signals": "signal_id",
     "intelligence_update_runs": "run_id",
+    "datasources": "datasource_id",
+    "dashboards": "dashboard_id",
+    "scan_policies": "policy_id",
+    "scan_requests": "scan_id",
+    "scan_results": "scan_id",
+    "report_templates": "template_id",
+    "generated_reports": "report_id",
+    "data_records": "record_id",
+    "datasource_ingestion_jobs": "job_id",
 }
 
 

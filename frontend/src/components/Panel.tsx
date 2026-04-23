@@ -1,24 +1,21 @@
 import type { ReactNode } from 'react';
+import { Card } from './Card';
+import { SectionHeader } from './SectionHeader';
 
 interface PanelProps {
   title: string;
   eyebrow?: string;
+  description?: string;
   children: ReactNode;
   action?: ReactNode;
   className?: string;
 }
 
-export function Panel({ title, eyebrow, children, action, className = '' }: PanelProps) {
+export function Panel({ title, eyebrow, description, children, action, className = '' }: PanelProps) {
   return (
-    <section className={`theme-surface rounded-2xl border p-5 backdrop-blur-xl ${className}`}>
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          {eyebrow && <p className="theme-brand text-[11px] font-bold uppercase tracking-[0.22em]">{eyebrow}</p>}
-          <h2 className="theme-text-primary mt-1 text-lg font-semibold">{title}</h2>
-        </div>
-        {action}
-      </div>
+    <Card className={`p-5 ${className}`}>
+      <SectionHeader title={title} eyebrow={eyebrow} description={description} action={action} />
       {children}
-    </section>
+    </Card>
   );
 }

@@ -1,113 +1,122 @@
-import { useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { useFetch } from './hooks/useFetch';
 import { Alerts } from './pages/Alerts';
-import { Assets } from './pages/Assets';
 import { Automation } from './pages/Automation';
+import { DataSources } from './pages/DataSources';
 import { Dependencies } from './pages/Dependencies';
 import { Executions } from './pages/Executions';
-import { Findings } from './pages/Findings';
-import { Inventory } from './pages/Inventory';
-import { Overview } from './pages/Overview';
+import { Home } from './pages/Home';
 import { Plans } from './pages/Plans';
 import { Policies } from './pages/Policies';
 import { Remediation } from './pages/Remediation';
-import { Reports } from './pages/Reports';
 import { Scheduler } from './pages/Scheduler';
-import { Validator } from './pages/Validator';
-import { SecuritySignals } from './pages/SecuritySignals';
 import { ServiceHealth } from './pages/ServiceHealth';
+import { Settings } from './pages/Settings';
+import { SecuritySignals } from './pages/SecuritySignals';
+import { Validator } from './pages/Validator';
 import {
   getAlerts,
   getAssets,
   getAutomationRuns,
+  getDashboards,
+  getDatasources,
   getDependencies,
   getEnvironments,
   getExecutions,
+  getFindings,
+  getIntelligenceUpdateRuns,
   getInventory,
   getLokiSummary,
   getPlans,
   getPolicies,
+  getPlatformBackups,
+  getPlatformHealth,
   getPrioritizedFindings,
   getPrometheusSummary,
   getRemediations,
   getReports,
+  getReportTemplates,
   getRiskyAssets,
+  getScans,
+  getScanPolicies,
   getSecuritySignals,
-  getServiceStatus,
   getServiceHealth,
+  getServiceStatus,
   getSchedulerStatus,
   getSystemMode,
-  getTelemetrySummary,
   getTelemetrySourceHealth,
+  getTelemetrySummary,
   getVulnerabilityMatches,
-  getIntelligenceUpdateRuns,
-  getPlatformBackups,
-  getPlatformHealth,
 } from './services/api';
 import type { ManagedEnvironment } from './types/api';
 
-const mobileNav = [
-  { path: '/', label: 'Overview' },
-  { path: '/assets', label: 'Assets' },
-  { path: '/inventory', label: 'Inventory' },
-  { path: '/findings', label: 'Findings' },
-  { path: '/remediation', label: 'Remediation' },
-  { path: '/alerts', label: 'Alerts' },
-  { path: '/signals', label: 'Security Signals' },
-  { path: '/service-health', label: 'Service Health' },
-  { path: '/dependencies', label: 'Dependencies' },
-  { path: '/scheduler', label: 'Operations' },
-  { path: '/policies', label: 'Policies' },
-  { path: '/reports', label: 'Reports' },
-  { path: '/automation', label: 'Automation' },
-  { path: '/validator', label: 'Validator' },
-  { path: '/plans', label: 'Plans' },
-  { path: '/executions', label: 'Executions' },
-];
+const Dashboards = lazy(() => import('./pages/Dashboards').then((module) => ({ default: module.Dashboards })));
+const Reports = lazy(() => import('./pages/Reports').then((module) => ({ default: module.Reports })));
+const Scans = lazy(() => import('./pages/Scans').then((module) => ({ default: module.Scans })));
+
+const SIDEBAR_STORAGE_KEY = 'purpleclaw.sidebar_collapsed';
+const ENVIRONMENT_STORAGE_KEY = 'purpleclaw.environment_id';
 
 function App() {
+  const navigate = useNavigate();
   const [apiStatus, setApiStatus] = useState<'online' | 'offline'>('offline');
-  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState(() => localStorage.getItem('purpleclaw.environment_id') ?? 'homelab');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState(() => localStorage.getItem(ENVIRONMENT_STORAGE_KEY) ?? '');
+
   const environmentsFetch = useFetch(getEnvironments, []);
-  const plansFetch = useFetch(() => getPlans(selectedEnvironmentId), [selectedEnvironmentId]);
-  const executionsFetch = useFetch(() => getExecutions(selectedEnvironmentId), [selectedEnvironmentId]);
-  const assetsFetch = useFetch(() => getAssets(selectedEnvironmentId), [selectedEnvironmentId]);
-  const inventoryFetch = useFetch(() => getInventory(selectedEnvironmentId), [selectedEnvironmentId]);
-  const vulnerabilityMatchesFetch = useFetch(() => getVulnerabilityMatches(selectedEnvironmentId), [selectedEnvironmentId]);
-  const findingsFetch = useFetch(() => getPrioritizedFindings(selectedEnvironmentId), [selectedEnvironmentId]);
-  const riskyAssetsFetch = useFetch(() => getRiskyAssets(selectedEnvironmentId), [selectedEnvironmentId]);
-  const remediationsFetch = useFetch(() => getRemediations(undefined, selectedEnvironmentId), [selectedEnvironmentId]);
+  const plansFetch = useFetch(() => getPlans(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const executionsFetch = useFetch(() => getExecutions(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const assetsFetch = useFetch(() => getAssets(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const inventoryFetch = useFetch(() => getInventory(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const datasourcesFetch = useFetch(() => getDatasources(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const dashboardsFetch = useFetch(() => getDashboards(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const vulnerabilityMatchesFetch = useFetch(() => getVulnerabilityMatches(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const findingsFetch = useFetch(() => getPrioritizedFindings(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const allFindingsFetch = useFetch(() => getFindings(undefined, selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const riskyAssetsFetch = useFetch(() => getRiskyAssets(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const remediationsFetch = useFetch(() => getRemediations(undefined, selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const scanPoliciesFetch = useFetch(() => getScanPolicies(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const scansFetch = useFetch(() => getScans(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
   const policiesFetch = useFetch(getPolicies, []);
   const reportsFetch = useFetch(getReports, []);
-  const telemetryFetch = useFetch(() => getTelemetrySummary(selectedEnvironmentId), [selectedEnvironmentId]);
-  const prometheusFetch = useFetch(() => getPrometheusSummary(selectedEnvironmentId), [selectedEnvironmentId]);
-  const lokiFetch = useFetch(() => getLokiSummary(selectedEnvironmentId), [selectedEnvironmentId]);
-  const alertsFetch = useFetch(() => getAlerts(selectedEnvironmentId), [selectedEnvironmentId]);
-  const signalsFetch = useFetch(() => getSecuritySignals(selectedEnvironmentId), [selectedEnvironmentId]);
-  const serviceHealthFetch = useFetch(() => getServiceHealth(selectedEnvironmentId), [selectedEnvironmentId]);
-  const dependenciesFetch = useFetch(() => getDependencies(selectedEnvironmentId), [selectedEnvironmentId]);
-  const telemetrySourceHealthFetch = useFetch(() => getTelemetrySourceHealth(selectedEnvironmentId), [selectedEnvironmentId]);
+  const reportTemplatesFetch = useFetch(getReportTemplates, []);
+  const telemetryFetch = useFetch(() => getTelemetrySummary(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const prometheusFetch = useFetch(() => getPrometheusSummary(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const lokiFetch = useFetch(() => getLokiSummary(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const alertsFetch = useFetch(() => getAlerts(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const signalsFetch = useFetch(() => getSecuritySignals(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const serviceHealthFetch = useFetch(() => getServiceHealth(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const dependenciesFetch = useFetch(() => getDependencies(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
+  const telemetrySourceHealthFetch = useFetch(() => getTelemetrySourceHealth(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
   const schedulerFetch = useFetch(getSchedulerStatus, []);
   const platformHealthFetch = useFetch(getPlatformHealth, []);
   const platformBackupsFetch = useFetch(getPlatformBackups, []);
   const intelligenceRunsFetch = useFetch(getIntelligenceUpdateRuns, []);
   const modeFetch = useFetch(getSystemMode, []);
-  const automationRunsFetch = useFetch(() => getAutomationRuns(selectedEnvironmentId), [selectedEnvironmentId]);
+  const automationRunsFetch = useFetch(() => getAutomationRuns(selectedEnvironmentId || undefined), [selectedEnvironmentId]);
 
   const refreshData = () => {
+    void environmentsFetch.refetch();
     void plansFetch.refetch();
     void executionsFetch.refetch();
     void assetsFetch.refetch();
     void inventoryFetch.refetch();
+    void datasourcesFetch.refetch();
+    void dashboardsFetch.refetch();
     void vulnerabilityMatchesFetch.refetch();
     void findingsFetch.refetch();
+    void allFindingsFetch.refetch();
     void riskyAssetsFetch.refetch();
     void remediationsFetch.refetch();
+    void scanPoliciesFetch.refetch();
+    void scansFetch.refetch();
     void policiesFetch.refetch();
     void reportsFetch.refetch();
+    void reportTemplatesFetch.refetch();
     void telemetryFetch.refetch();
     void prometheusFetch.refetch();
     void lokiFetch.refetch();
@@ -125,18 +134,19 @@ function App() {
   };
 
   const environments = environmentsFetch.data ?? [];
-  const selectedEnvironment =
-    environments.find((environment) => environment.environment_id === selectedEnvironmentId) ??
-    ({ environment_id: selectedEnvironmentId, name: selectedEnvironmentId, type: 'homelab', status: 'active', description: '', created_at: '', updated_at: '' } satisfies ManagedEnvironment);
+  const selectedEnvironment = environments.find((environment) => environment.environment_id === selectedEnvironmentId) ?? environments[0] ?? null;
 
   const handleEnvironmentChange = (environmentId: string) => {
     setSelectedEnvironmentId(environmentId);
-    localStorage.setItem('purpleclaw.environment_id', environmentId);
+    localStorage.setItem(ENVIRONMENT_STORAGE_KEY, environmentId);
   };
 
   useEffect(() => {
-    let active = true;
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
+  useEffect(() => {
+    let active = true;
     getServiceStatus()
       .then(() => {
         if (active) {
@@ -148,7 +158,6 @@ function App() {
           setApiStatus('offline');
         }
       });
-
     return () => {
       active = false;
     };
@@ -158,7 +167,7 @@ function App() {
     if (!environments.length) {
       return;
     }
-    if (!environments.some((environment) => environment.environment_id === selectedEnvironmentId)) {
+    if (!selectedEnvironmentId || !environments.some((environment) => environment.environment_id === selectedEnvironmentId)) {
       handleEnvironmentChange(environments[0].environment_id);
     }
   }, [environments, selectedEnvironmentId]);
@@ -167,12 +176,18 @@ function App() {
   const executions = executionsFetch.data ?? [];
   const assets = assetsFetch.data ?? [];
   const inventory = inventoryFetch.data ?? [];
+  const datasources = datasourcesFetch.data ?? [];
+  const dashboards = dashboardsFetch.data ?? [];
   const vulnerabilityMatches = vulnerabilityMatchesFetch.data ?? [];
   const findings = findingsFetch.data ?? [];
+  const allFindings = allFindingsFetch.data ?? [];
   const riskyAssets = riskyAssetsFetch.data ?? [];
   const remediations = remediationsFetch.data ?? [];
+  const scanPolicies = scanPoliciesFetch.data ?? [];
+  const scans = scansFetch.data ?? [];
   const policies = policiesFetch.data ?? [];
   const reports = reportsFetch.data ?? [];
+  const reportTemplates = reportTemplatesFetch.data ?? [];
   const telemetry = telemetryFetch.data ?? null;
   const prometheus = prometheusFetch.data ?? null;
   const loki = lokiFetch.data ?? null;
@@ -187,15 +202,23 @@ function App() {
   const intelligenceRuns = intelligenceRunsFetch.data ?? [];
   const systemMode = modeFetch.data ?? null;
   const automationRuns = automationRunsFetch.data ?? [];
+  const postureScore = riskyAssets.length
+    ? Math.max(0, 100 - Math.round(riskyAssets.reduce((total, asset) => total + asset.aggregate_score, 0) / riskyAssets.length))
+    : 100;
   const postureLoading =
     assetsFetch.loading ||
     inventoryFetch.loading ||
+    datasourcesFetch.loading ||
+    dashboardsFetch.loading ||
     vulnerabilityMatchesFetch.loading ||
     findingsFetch.loading ||
     riskyAssetsFetch.loading ||
     remediationsFetch.loading ||
+    scanPoliciesFetch.loading ||
+    scansFetch.loading ||
     policiesFetch.loading ||
     reportsFetch.loading ||
+    reportTemplatesFetch.loading ||
     telemetryFetch.loading ||
     prometheusFetch.loading ||
     lokiFetch.loading ||
@@ -213,12 +236,17 @@ function App() {
   const postureError =
     assetsFetch.error ??
     inventoryFetch.error ??
+    datasourcesFetch.error ??
+    dashboardsFetch.error ??
     vulnerabilityMatchesFetch.error ??
     findingsFetch.error ??
     riskyAssetsFetch.error ??
     remediationsFetch.error ??
+    scanPoliciesFetch.error ??
+    scansFetch.error ??
     policiesFetch.error ??
     reportsFetch.error ??
+    reportTemplatesFetch.error ??
     telemetryFetch.error ??
     prometheusFetch.error ??
     lokiFetch.error ??
@@ -234,106 +262,127 @@ function App() {
     modeFetch.error ??
     automationRunsFetch.error;
 
+  if (!selectedEnvironment) {
+    return <div className="app-shell grid min-h-screen place-items-center px-6 text-center text-sm text-[var(--text-muted)]">Loading environments...</div>;
+  }
+
   return (
     <div className="app-shell">
       <div className="app-backdrop fixed inset-0" />
       <div className="app-grid fixed inset-0" />
 
-      <Sidebar />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
+        onToggle={() => setSidebarCollapsed((current) => !current)}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
+      />
 
-      <div className="relative lg:pl-72">
+      <div className={`relative transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-24' : 'lg:pl-72'}`}>
         <Header
           apiStatus={apiStatus}
           environments={environments}
-          selectedEnvironmentId={selectedEnvironmentId}
+          selectedEnvironmentId={selectedEnvironment.environment_id}
           onEnvironmentChange={handleEnvironmentChange}
+          onCreateEnvironmentRequest={() => navigate('/settings')}
+          onManageEnvironmentRequest={() => navigate('/settings')}
+          onSidebarToggle={() => setMobileSidebarOpen(true)}
         />
-
-        <div className="theme-surface-strong border-b px-4 py-3 backdrop-blur-xl sm:px-6 lg:hidden">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {mobileNav.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.path === '/'}
-                className={({ isActive }) =>
-                  `rounded-2xl border px-3 py-2 text-center text-sm transition ${
-                    isActive
-                      ? 'border-fuchsia-400/40 bg-fuchsia-400/10 text-[var(--text-primary)]'
-                      : 'theme-inset theme-text-muted'
-                  }`
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </div>
-        </div>
 
         <main className="px-4 py-6 sm:px-6 lg:px-8">
           <Routes>
+            <Route path="/" element={<Navigate to="/home" replace />} />
             <Route
-              path="/"
+              path="/home"
               element={
-                <Overview
-                  plans={plans}
-                  executions={executions}
-                  assets={assets}
-                  findings={findings}
-                  vulnerabilityMatches={vulnerabilityMatches}
-                  riskyAssets={riskyAssets}
-                  remediations={remediations}
-                  telemetry={telemetry}
-                  prometheus={prometheus}
-                  loki={loki}
-                  alerts={alerts}
-                  signals={signals}
-                  serviceHealth={serviceHealth}
-                  telemetrySourceHealth={telemetrySourceHealth}
-                  systemMode={systemMode}
-                  automationRuns={automationRuns}
+                <Home
+                  environments={environments}
                   selectedEnvironment={selectedEnvironment}
-                  loading={plansFetch.loading || executionsFetch.loading}
-                  postureLoading={postureLoading}
-                  error={environmentsFetch.error ?? plansFetch.error ?? executionsFetch.error ?? postureError}
-                  onDataChanged={refreshData}
+                  selectedEnvironmentId={selectedEnvironment.environment_id}
+                  dashboards={dashboards}
+                  alerts={alerts}
+                  scans={scans}
+                  reports={reports}
+                  datasources={datasources}
+                  automationRuns={automationRuns}
+                  signals={signals}
+                  postureScore={postureScore}
+                  loading={postureLoading}
+                  onEnvironmentChange={handleEnvironmentChange}
+                  onCreateEnvironmentRequest={() => navigate('/settings')}
+                  onManageEnvironmentRequest={() => navigate('/settings')}
                 />
               }
             />
             <Route
-              path="/assets"
-              element={<Assets assets={assets} findings={findings} loading={assetsFetch.loading || findingsFetch.loading} error={assetsFetch.error ?? findingsFetch.error} />}
-            />
-            <Route
-              path="/inventory"
+              path="/dashboards"
               element={
-                <Inventory
-                  assets={assets}
-                  inventory={inventory}
-                  vulnerabilityMatches={vulnerabilityMatches}
-                  loading={assetsFetch.loading || inventoryFetch.loading || vulnerabilityMatchesFetch.loading}
-                  error={assetsFetch.error ?? inventoryFetch.error ?? vulnerabilityMatchesFetch.error}
-                />
+                <Suspense fallback={<div className="theme-text-faint py-14 text-center text-sm">Loading dashboards...</div>}>
+                  <Dashboards
+                    selectedEnvironmentId={selectedEnvironment.environment_id}
+                    dashboards={dashboards}
+                    datasources={datasources}
+                    loading={dashboardsFetch.loading || datasourcesFetch.loading}
+                    error={dashboardsFetch.error ?? datasourcesFetch.error}
+                    onDataChanged={refreshData}
+                  />
+                </Suspense>
               }
             />
-            <Route
-              path="/findings"
-              element={<Findings assets={assets} findings={findings} loading={assetsFetch.loading || findingsFetch.loading} error={assetsFetch.error ?? findingsFetch.error} />}
-            />
-            <Route
-              path="/remediation"
-              element={
-                <Remediation
-                  findings={findings}
-                  remediations={remediations}
-                  loading={findingsFetch.loading || remediationsFetch.loading}
-                  error={findingsFetch.error ?? remediationsFetch.error}
-                />
-              }
-            />
-            <Route path="/policies" element={<Policies policies={policies} loading={policiesFetch.loading} error={policiesFetch.error} />} />
-            <Route path="/reports" element={<Reports reports={reports} loading={reportsFetch.loading} error={reportsFetch.error} />} />
             <Route path="/alerts" element={<Alerts alerts={alerts} assets={assets} loading={alertsFetch.loading || assetsFetch.loading} error={alertsFetch.error ?? assetsFetch.error} />} />
+            <Route
+              path="/scans"
+              element={
+                <Suspense fallback={<div className="theme-text-faint py-14 text-center text-sm">Loading scans...</div>}>
+                  <Scans
+                    selectedEnvironmentId={selectedEnvironment.environment_id}
+                    policies={scanPolicies}
+                    scans={scans}
+                    loading={scanPoliciesFetch.loading || scansFetch.loading}
+                    error={scanPoliciesFetch.error ?? scansFetch.error}
+                    onDataChanged={refreshData}
+                  />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <Suspense fallback={<div className="theme-text-faint py-14 text-center text-sm">Loading reports...</div>}>
+                  <Reports
+                    selectedEnvironmentId={selectedEnvironment.environment_id}
+                    reports={reports}
+                    templates={reportTemplates}
+                    scans={scans}
+                    dashboards={dashboards}
+                    loading={reportsFetch.loading || reportTemplatesFetch.loading}
+                    error={reportsFetch.error ?? reportTemplatesFetch.error}
+                    onDataChanged={refreshData}
+                  />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/datasources"
+              element={<DataSources selectedEnvironmentId={selectedEnvironment.environment_id} datasources={datasources} loading={datasourcesFetch.loading} error={datasourcesFetch.error} onDataChanged={refreshData} />}
+            />
+            <Route
+              path="/settings"
+              element={
+                <Settings
+                  environments={environments}
+                  selectedEnvironmentId={selectedEnvironment.environment_id}
+                  onEnvironmentChange={handleEnvironmentChange}
+                  onEnvironmentsChanged={(nextEnvironmentId) => {
+                    if (nextEnvironmentId) {
+                      handleEnvironmentChange(nextEnvironmentId);
+                    }
+                    refreshData();
+                  }}
+                />
+              }
+            />
+
             <Route path="/signals" element={<SecuritySignals signals={signals} assets={assets} loading={signalsFetch.loading || assetsFetch.loading} error={signalsFetch.error ?? assetsFetch.error} />} />
             <Route path="/service-health" element={<ServiceHealth services={serviceHealth} loading={serviceHealthFetch.loading} error={serviceHealthFetch.error} />} />
             <Route path="/dependencies" element={<Dependencies dependencies={dependencies} loading={dependenciesFetch.loading} error={dependenciesFetch.error} />} />
@@ -341,7 +390,7 @@ function App() {
               path="/scheduler"
               element={
                 <Scheduler
-                  selectedEnvironmentId={selectedEnvironmentId}
+                  selectedEnvironmentId={selectedEnvironment.environment_id}
                   status={schedulerStatus}
                   platformHealth={platformHealth}
                   platformBackups={platformBackups}
@@ -359,7 +408,7 @@ function App() {
                 <Automation
                   mode={systemMode}
                   runs={automationRuns}
-                  selectedEnvironmentId={selectedEnvironmentId}
+                  selectedEnvironmentId={selectedEnvironment.environment_id}
                   prometheus={prometheus}
                   loki={loki}
                   loading={modeFetch.loading || automationRunsFetch.loading || prometheusFetch.loading || lokiFetch.loading}
@@ -369,12 +418,13 @@ function App() {
               }
             />
             <Route path="/plans" element={<Plans plans={plans} loading={plansFetch.loading} error={plansFetch.error} />} />
-            <Route
-              path="/executions"
-              element={<Executions executions={executions} loading={executionsFetch.loading} error={executionsFetch.error} />}
-            />
-            <Route path="/validator" element={<Validator selectedEnvironmentId={selectedEnvironmentId} onDataChanged={refreshData} />} />
+            <Route path="/executions" element={<Executions executions={executions} loading={executionsFetch.loading} error={executionsFetch.error} />} />
+            <Route path="/validator" element={<Validator selectedEnvironmentId={selectedEnvironment.environment_id} onDataChanged={refreshData} />} />
+            <Route path="/policies" element={<Policies policies={policies} loading={policiesFetch.loading} error={policiesFetch.error} />} />
+            <Route path="/remediation" element={<Remediation findings={allFindings} remediations={remediations} loading={allFindingsFetch.loading || remediationsFetch.loading} error={allFindingsFetch.error ?? remediationsFetch.error} />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>
+          {postureError ? <div className="theme-error mt-6 rounded-2xl p-4 text-sm">{postureError}</div> : null}
         </main>
       </div>
     </div>

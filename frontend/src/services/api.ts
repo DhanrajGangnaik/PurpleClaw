@@ -3,11 +3,23 @@ import type {
   Alert,
   Asset,
   AutomationRun,
+  DashboardConfig,
+  DataRecord,
+  RenderedDashboard,
+  DashboardSaveRequest,
+  DataSourceCreateRequest,
+  DatasourceIngestionJob,
+  DataSourceScheduleRequest,
+  DataSourceTestRequest,
+  DataSourceTestResult,
   DependencyStatus,
+  EnvironmentCreateRequest,
+  EnvironmentUpdateRequest,
   ExecuteResponse,
   ExecutionResult,
   ExercisePlan,
   Finding,
+  GenerateReportRequest,
   IncidentSummary,
   IntelligenceSummary,
   IntelligenceUpdateRun,
@@ -19,13 +31,21 @@ import type {
   ManagedEnvironment,
   PlatformBackup,
   PlatformHealth,
+  PaginatedDataRecords,
   Policy,
   PrometheusConfig,
   PrometheusHealth,
   PrometheusSummary,
+  RegisteredDataSource,
   RemediationTask,
   Report,
+  ReportPreview,
+  ReportTemplate,
   RiskByAsset,
+  ScanDetail,
+  ScanPolicy,
+  ScanPolicyCreateRequest,
+  ScanRunRequest,
   SchedulerStatus,
   SecuritySignal,
   ServiceHealth,
@@ -39,11 +59,23 @@ export type {
   Alert,
   Asset,
   AutomationRun,
+  DashboardConfig,
+  DataRecord,
+  RenderedDashboard,
+  DashboardSaveRequest,
+  DataSourceCreateRequest,
+  DatasourceIngestionJob,
+  DataSourceScheduleRequest,
+  DataSourceTestRequest,
+  DataSourceTestResult,
   DependencyStatus,
+  EnvironmentCreateRequest,
+  EnvironmentUpdateRequest,
   ExecuteResponse,
   ExecutionResult,
   ExercisePlan,
   Finding,
+  GenerateReportRequest,
   IncidentSummary,
   IntelligenceSummary,
   IntelligenceUpdateRun,
@@ -55,13 +87,21 @@ export type {
   ManagedEnvironment,
   PlatformBackup,
   PlatformHealth,
+  PaginatedDataRecords,
   Policy,
   PrometheusConfig,
   PrometheusHealth,
   PrometheusSummary,
+  RegisteredDataSource,
   RemediationTask,
   Report,
+  ReportPreview,
+  ReportTemplate,
   RiskByAsset,
+  ScanDetail,
+  ScanPolicy,
+  ScanPolicyCreateRequest,
+  ScanRunRequest,
   SchedulerStatus,
   SecuritySignal,
   ServiceHealth,
@@ -142,6 +182,20 @@ function environmentParams(environmentId?: string) {
 export async function getEnvironments() {
   const response = await api.get<ManagedEnvironment[]>('/environments');
   return response.data;
+}
+
+export async function createEnvironment(payload: EnvironmentCreateRequest) {
+  const response = await api.post<ManagedEnvironment>('/environments', payload);
+  return response.data;
+}
+
+export async function updateEnvironment(environmentId: string, payload: EnvironmentUpdateRequest) {
+  const response = await api.put<ManagedEnvironment>(`/environments/${environmentId}`, payload);
+  return response.data;
+}
+
+export async function deleteEnvironment(environmentId: string) {
+  await api.delete(`/environments/${environmentId}`);
 }
 
 export async function getPlans(environmentId?: string) {
@@ -263,6 +317,111 @@ export async function getPolicies() {
 
 export async function getReports() {
   const response = await api.get<Report[]>('/reports');
+  return response.data;
+}
+
+export async function getReportTemplates() {
+  const response = await api.get<ReportTemplate[]>('/report-templates');
+  return response.data;
+}
+
+export async function generateReport(payload: GenerateReportRequest) {
+  const response = await api.post<Report>('/reports/generate', payload);
+  return response.data;
+}
+
+export async function previewReport(payload: GenerateReportRequest) {
+  const response = await api.post<ReportPreview>('/reports/preview', payload);
+  return response.data;
+}
+
+export function getReportDownloadUrl(reportId: string) {
+  const baseUrl = (api.defaults.baseURL ?? '/api').replace(/\/$/, '');
+  return `${baseUrl}/reports/${reportId}/download`;
+}
+
+export async function getDatasources(environmentId?: string) {
+  const response = await api.get<RegisteredDataSource[]>('/datasources', { params: environmentParams(environmentId) });
+  return response.data;
+}
+
+export async function createDatasource(payload: DataSourceCreateRequest) {
+  const response = await api.post<RegisteredDataSource>('/datasources', payload);
+  return response.data;
+}
+
+export async function testDatasource(payload: DataSourceTestRequest) {
+  const response = await api.post<DataSourceTestResult>('/datasources/test', payload);
+  return response.data;
+}
+
+export async function getDatasourceJobs(environmentId?: string) {
+  const response = await api.get<DatasourceIngestionJob[]>('/datasources/jobs', { params: environmentParams(environmentId) });
+  return response.data;
+}
+
+export async function ingestDatasource(datasourceId: string) {
+  const response = await api.post<DatasourceIngestionJob>(`/datasources/${datasourceId}/ingest`);
+  return response.data;
+}
+
+export async function scheduleDatasource(datasourceId: string, payload: DataSourceScheduleRequest) {
+  const response = await api.post<DatasourceIngestionJob>(`/datasources/${datasourceId}/schedule`, payload);
+  return response.data;
+}
+
+export async function updateDatasourceSchedule(datasourceId: string, payload: DataSourceScheduleRequest) {
+  const response = await api.put<DatasourceIngestionJob>(`/datasources/${datasourceId}/schedule`, payload);
+  return response.data;
+}
+
+export async function disableDatasourceSchedule(datasourceId: string) {
+  const response = await api.post<DatasourceIngestionJob>(`/datasources/${datasourceId}/schedule/disable`);
+  return response.data;
+}
+
+export async function getDatasourceRecords(datasourceId: string, params?: { page?: number; page_size?: number; record_type?: string }) {
+  const response = await api.get<PaginatedDataRecords>(`/datasources/${datasourceId}/records`, { params });
+  return response.data;
+}
+
+export async function getDashboards(environmentId?: string) {
+  const response = await api.get<DashboardConfig[]>('/dashboards', { params: environmentParams(environmentId) });
+  return response.data;
+}
+
+export async function getRenderedDashboard(dashboardId: string) {
+  const response = await api.get<RenderedDashboard>(`/dashboards/${dashboardId}/render`);
+  return response.data;
+}
+
+export async function createDashboard(payload: DashboardSaveRequest) {
+  const response = await api.post<DashboardConfig>('/dashboards', payload);
+  return response.data;
+}
+
+export async function updateDashboard(dashboardId: string, payload: Omit<DashboardSaveRequest, 'environment_id'>) {
+  const response = await api.put<DashboardConfig>(`/dashboards/${dashboardId}`, payload);
+  return response.data;
+}
+
+export async function getScanPolicies(environmentId?: string) {
+  const response = await api.get<ScanPolicy[]>('/scan-policies', { params: environmentParams(environmentId) });
+  return response.data;
+}
+
+export async function createScanPolicy(payload: ScanPolicyCreateRequest) {
+  const response = await api.post<ScanPolicy>('/scan-policies', payload);
+  return response.data;
+}
+
+export async function getScans(environmentId?: string) {
+  const response = await api.get<ScanDetail[]>('/scans', { params: environmentParams(environmentId) });
+  return response.data;
+}
+
+export async function runScan(payload: ScanRunRequest) {
+  const response = await api.post<ScanDetail>('/scans/run', payload);
   return response.data;
 }
 

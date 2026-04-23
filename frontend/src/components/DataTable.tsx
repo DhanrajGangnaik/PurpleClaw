@@ -16,13 +16,13 @@ interface DataTableProps<T> {
 
 export function DataTable<T>({ columns, rows, getRowKey, emptyText, onRowClick }: DataTableProps<T>) {
   return (
-    <div className="theme-inset overflow-hidden rounded-2xl border">
+    <div className="overflow-hidden rounded-card border theme-surface-strong">
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead style={{ background: 'var(--table-head)' }}>
             <tr>
               {columns.map((column) => (
-                <th key={column.key} className="theme-text-faint border-b px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.18em]" style={{ borderColor: 'var(--border)' }}>
+                <th key={column.key} className="theme-text-faint border-b px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ borderColor: 'var(--border)' }}>
                   {column.label}
                 </th>
               ))}
@@ -40,7 +40,7 @@ export function DataTable<T>({ columns, rows, getRowKey, emptyText, onRowClick }
                 <tr
                   key={getRowKey(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={`border-b transition duration-200 ${onRowClick ? 'cursor-pointer' : ''}`}
+                  className={`border-b transition-colors duration-150 ${onRowClick ? 'cursor-pointer' : ''}`}
                   style={{ borderColor: 'var(--table-row)' }}
                   onMouseEnter={(event) => {
                     event.currentTarget.style.background = 'var(--table-hover)';
@@ -50,7 +50,7 @@ export function DataTable<T>({ columns, rows, getRowKey, emptyText, onRowClick }
                   }}
                 >
                   {columns.map((column) => (
-                    <td key={column.key} className="theme-text-secondary whitespace-nowrap px-4 py-4 text-sm">
+                    <td key={column.key} className="theme-text-secondary px-4 py-4 text-sm align-top">
                       {column.render(row)}
                     </td>
                   ))}
