@@ -14,15 +14,16 @@ interface WidgetCardProps {
 
 export function WidgetCard({ title, type, freshness, lastUpdated, children }: WidgetCardProps) {
   const tone = freshness === 'fresh' ? 'green' : freshness === 'stale' ? 'red' : 'slate';
+
   return (
-    <Card className="p-5">
+    <Card className="p-5 sm:p-6">
       <SectionHeader
         title={title}
         eyebrow={type.replace(/_/g, ' ')}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {freshness && <StatusBadge label={freshness} tone={tone} />}
-            {lastUpdated && <span className="theme-text-faint text-xs">Updated {formatDate(lastUpdated)}</span>}
+            {freshness ? <StatusBadge label={freshness} tone={tone} /> : null}
+            {lastUpdated ? <span className="theme-text-faint text-xs">Updated {formatDate(lastUpdated)}</span> : null}
           </div>
         }
       />

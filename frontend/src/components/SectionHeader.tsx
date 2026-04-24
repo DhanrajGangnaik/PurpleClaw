@@ -9,13 +9,17 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ title, eyebrow, description, action }: SectionHeaderProps) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-4">
-      <div>
-        {eyebrow && <p className="theme-text-faint text-[11px] font-semibold uppercase tracking-[0.18em]">{eyebrow}</p>}
-        <h2 className="theme-text-primary mt-1 text-lg font-semibold">{title}</h2>
-        {description && <p className="theme-text-muted mt-2 max-w-2xl text-sm leading-6">{description}</p>}
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        {eyebrow ? <p className="workspace-eyebrow mb-2">{eyebrow}</p> : null}
+        <h2 className="text-lg font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>{title}</h2>
+        {description ? (
+          <p className="mt-2 max-w-3xl text-sm leading-6" style={{ color: 'var(--text-muted)' }}>
+            {description}
+          </p>
+        ) : null}
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }

@@ -2,8 +2,9 @@ import type { FormEvent } from 'react';
 import { useMemo, useState } from 'react';
 import { Panel } from '../components/Panel';
 import { StatusBadge } from '../components/StatusBadge';
-import { createEnvironment, deleteEnvironment, updateEnvironment } from '../services/api';
-import type { EnvironmentCreateRequest, ManagedEnvironment, ManagedEnvironmentStatus, ManagedEnvironmentType } from '../types/api';
+import { createEnvironment, deleteEnvironment, getErrorMessage, updateEnvironment } from '../services/api';
+import type { ManagedEnvironment } from '../types/api';
+import { formatDate } from '../utils';
 
 interface SettingsProps {
   environments: ManagedEnvironment[];
@@ -12,37 +13,51 @@ interface SettingsProps {
   onEnvironmentsChanged: (nextEnvironmentId?: string) => void;
 }
 
-interface EnvironmentFormState extends EnvironmentCreateRequest {}
+interface CreateEnvironmentFormState {
+  name: string;
+  description: string;
+}
 
-const defaultFormState: EnvironmentFormState = {
+const defaultFormState: CreateEnvironmentFormState = {
   name: '',
-  type: 'lab',
   description: '',
-  status: 'active',
 };
 
 export function Settings({ environments, selectedEnvironmentId, onEnvironmentChange, onEnvironmentsChanged }: SettingsProps) {
-  const [createForm, setCreateForm] = useState<EnvironmentFormState>(defaultFormState);
+  const [createForm, setCreateForm] = useState<CreateEnvironmentFormState>(defaultFormState);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const editingEnvironment = useMemo(
     () => environments.find((environment) => environment.environment_id === editingId) ?? null,
     [editingId, environments],
+  );
+  const pendingDeleteEnvironment = useMemo(
+    () => environments.find((environment) => environment.environment_id === pendingDeleteId) ?? null,
+    [environments, pendingDeleteId],
   );
 
   async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
-      const created = await createEnvironment(createForm);
+      const trimmedName = createForm.name.trim();
+      const trimmedDescription = createForm.description.trim();
+      const created = await createEnvironment({
+        name: trimmedName,
+        description: trimmedDescription || '',
+      });
       setCreateForm(defaultFormState);
       onEnvironmentChange(created.environment_id);
       onEnvironmentsChanged(created.environment_id);
+      setSuccess(`Environment "${created.name}" created.`);
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : 'Unable to create environment');
+      setError(getErrorMessage(errorValue));
     } finally {
       setSaving(false);
     }
@@ -54,19 +69,20 @@ export function Settings({ environments, selectedEnvironmentId, onEnvironmentCha
       return;
     }
     const formData = new FormData(event.currentTarget);
-    const payload: EnvironmentFormState = {
-      name: String(formData.get('name') ?? ''),
-      type: String(formData.get('type') ?? 'lab') as ManagedEnvironmentType,
-      description: String(formData.get('description') ?? ''),
-      status: String(formData.get('status') ?? 'active') as ManagedEnvironmentStatus,
-    };
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
-      const updated = await updateEnvironment(editingEnvironment.environment_id, payload);
+      const updated = await updateEnvironment(editingEnvironment.environment_id, {
+        name: String(formData.get('name') ?? ''),
+        description: String(formData.get('description') ?? ''),
+        type: editingEnvironment.type,
+        status: editingEnvironment.status,
+      });
       onEnvironmentChange(updated.environment_id);
       onEnvironmentsChanged(updated.environment_id);
       setEditingId(null);
+      setSuccess(`Environment "${updated.name}" updated.`);
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : 'Unable to update environment');
     } finally {
@@ -74,19 +90,35 @@ export function Settings({ environments, selectedEnvironmentId, onEnvironmentCha
     }
   }
 
-  async function handleDelete(environmentId: string) {
+  async function confirmDelete() {
+    if (!pendingDeleteEnvironment) {
+      return;
+    }
+
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
-      await deleteEnvironment(environmentId);
-      const fallbackEnvironment = environments.find((environment) => environment.environment_id !== environmentId);
-      if (selectedEnvironmentId === environmentId && fallbackEnvironment) {
-        onEnvironmentChange(fallbackEnvironment.environment_id);
+      const fallbackEnvironment = environments.find((environment) => environment.environment_id !== pendingDeleteEnvironment.environment_id);
+      const deletedSelectedEnvironment = selectedEnvironmentId === pendingDeleteEnvironment.environment_id;
+      await deleteEnvironment(pendingDeleteEnvironment.environment_id);
+      if (deletedSelectedEnvironment) {
+        if (fallbackEnvironment) {
+          onEnvironmentChange(fallbackEnvironment.environment_id);
+        } else {
+          onEnvironmentChange('');
+        }
       }
-      onEnvironmentsChanged(fallbackEnvironment?.environment_id);
-      if (editingId === environmentId) {
+      onEnvironmentsChanged(
+        deletedSelectedEnvironment
+          ? (fallbackEnvironment?.environment_id ?? '')
+          : selectedEnvironmentId,
+      );
+      if (editingId === pendingDeleteEnvironment.environment_id) {
         setEditingId(null);
       }
+      setSuccess(`Environment "${pendingDeleteEnvironment.name}" deleted.`);
+      setPendingDeleteId(null);
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : 'Unable to delete environment');
     } finally {
@@ -97,47 +129,25 @@ export function Settings({ environments, selectedEnvironmentId, onEnvironmentCha
   return (
     <div className="space-y-6">
       {error ? <div className="theme-error rounded-2xl p-4 text-sm">{error}</div> : null}
+      {success ? <div className="theme-success-banner rounded-2xl p-4 text-sm">{success}</div> : null}
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
-        <Panel title="Create Environment" eyebrow="Workspace Setup" description="Environments are now user-managed. Create them here, then switch between them throughout the app.">
+        <Panel title="Create Environment" eyebrow="Workspace Setup" description="Create environments with a name and an optional description. No defaults are recreated automatically.">
           <form className="grid gap-4" onSubmit={handleCreateSubmit}>
             <input
-              className="theme-input theme-focus rounded-2xl border px-4 py-3"
+              className="theme-input theme-focus rounded-2xl px-4 py-3"
               name="name"
               placeholder="Environment name"
               value={createForm.name}
               onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
               required
             />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <select
-                className="theme-input theme-focus rounded-2xl border px-4 py-3"
-                name="type"
-                value={createForm.type}
-                onChange={(event) => setCreateForm((current) => ({ ...current, type: event.target.value as ManagedEnvironmentType }))}
-              >
-                <option value="homelab">Homelab</option>
-                <option value="lab">Lab</option>
-                <option value="staging">Staging</option>
-                <option value="production">Production</option>
-              </select>
-              <select
-                className="theme-input theme-focus rounded-2xl border px-4 py-3"
-                name="status"
-                value={createForm.status}
-                onChange={(event) => setCreateForm((current) => ({ ...current, status: event.target.value as ManagedEnvironmentStatus }))}
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
             <textarea
-              className="theme-input theme-focus min-h-32 rounded-2xl border px-4 py-3"
+              className="theme-input theme-focus min-h-32 rounded-2xl px-4 py-3"
               name="description"
-              placeholder="What this environment is for"
+              placeholder="Optional description"
               value={createForm.description}
               onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
-              required
             />
             <button type="submit" disabled={saving} className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-60">
               {saving ? 'Saving...' : 'Create Environment'}
@@ -145,28 +155,21 @@ export function Settings({ environments, selectedEnvironmentId, onEnvironmentCha
           </form>
         </Panel>
 
-        <Panel title="Environment Library" description="Edit or remove environments without relying on predefined options.">
+        <Panel title="Environment Library" eyebrow="Available Contexts" description={environments.length ? 'Each environment can be selected, edited, or deleted.' : 'No environments yet. Create one to begin.'}>
           <div className="space-y-3">
+            {!environments.length ? (
+              <div className="theme-text-faint py-12 text-center text-sm">No environments yet. Create one to begin.</div>
+            ) : null}
             {environments.map((environment) => {
               const isEditing = editingEnvironment?.environment_id === environment.environment_id;
+              const isSelected = selectedEnvironmentId === environment.environment_id;
+
               return (
-                <div key={environment.environment_id} className="theme-inset rounded-3xl border p-4">
+                <div key={environment.environment_id} className="theme-inset rounded-3xl p-4">
                   {isEditing ? (
                     <form className="grid gap-3" onSubmit={handleUpdateSubmit}>
-                      <input className="theme-input theme-focus rounded-2xl border px-4 py-3" name="name" defaultValue={environment.name} required />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <select className="theme-input theme-focus rounded-2xl border px-4 py-3" name="type" defaultValue={environment.type}>
-                          <option value="homelab">Homelab</option>
-                          <option value="lab">Lab</option>
-                          <option value="staging">Staging</option>
-                          <option value="production">Production</option>
-                        </select>
-                        <select className="theme-input theme-focus rounded-2xl border px-4 py-3" name="status" defaultValue={environment.status}>
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                        </select>
-                      </div>
-                      <textarea className="theme-input theme-focus min-h-24 rounded-2xl border px-4 py-3" name="description" defaultValue={environment.description} required />
+                      <input className="theme-input theme-focus rounded-2xl px-4 py-3" name="name" defaultValue={environment.name} required />
+                      <textarea className="theme-input theme-focus min-h-24 rounded-2xl px-4 py-3" name="description" defaultValue={environment.description} placeholder="Optional description" />
                       <div className="flex flex-wrap gap-3">
                         <button type="submit" disabled={saving} className="theme-button-primary rounded-2xl px-4 py-2 text-sm font-semibold transition disabled:opacity-60">
                           Save Changes
@@ -178,15 +181,18 @@ export function Settings({ environments, selectedEnvironmentId, onEnvironmentCha
                     </form>
                   ) : (
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="theme-text-primary text-base font-semibold">{environment.name}</p>
                           <StatusBadge label={environment.type} tone="purple" />
                           <StatusBadge label={environment.status} tone={environment.status === 'active' ? 'cyan' : 'slate'} />
-                          {selectedEnvironmentId === environment.environment_id ? <StatusBadge label="selected" tone="green" /> : null}
+                          {isSelected ? <StatusBadge label="selected" tone="green" /> : null}
                         </div>
-                        <p className="theme-text-muted mt-2 text-sm leading-6">{environment.description}</p>
-                        <p className="theme-text-faint mt-3 text-xs">ID: {environment.environment_id}</p>
+                        <p className="theme-text-muted mt-2 text-sm leading-6">{environment.description || 'No description provided.'}</p>
+                        <div className="mt-3 flex flex-wrap gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+                          <span>Created {formatDate(environment.created_at)}</span>
+                          <span>Updated {formatDate(environment.updated_at)}</span>
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-3">
                         <button type="button" onClick={() => onEnvironmentChange(environment.environment_id)} className="theme-button-secondary rounded-2xl px-4 py-2 text-sm font-semibold transition">
@@ -195,12 +201,7 @@ export function Settings({ environments, selectedEnvironmentId, onEnvironmentCha
                         <button type="button" onClick={() => setEditingId(environment.environment_id)} className="theme-button-secondary rounded-2xl px-4 py-2 text-sm font-semibold transition">
                           Edit
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(environment.environment_id)}
-                          disabled={saving || environments.length === 1}
-                          className="rounded-2xl border border-rose-400/30 px-4 py-2 text-sm font-semibold text-rose-300 transition disabled:opacity-40"
-                        >
+                        <button type="button" onClick={() => setPendingDeleteId(environment.environment_id)} disabled={saving} className="theme-button-danger rounded-2xl px-4 py-2 text-sm font-semibold transition disabled:opacity-40">
                           Delete
                         </button>
                       </div>
@@ -212,6 +213,28 @@ export function Settings({ environments, selectedEnvironmentId, onEnvironmentCha
           </div>
         </Panel>
       </div>
+
+      {pendingDeleteEnvironment ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="workspace-panel w-full max-w-xl p-6">
+            <p className="workspace-eyebrow">Confirm Deletion</p>
+            <h3 className="mt-2 text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Delete {pendingDeleteEnvironment.name}?
+            </h3>
+            <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-muted)' }}>
+              Deleting this environment will remove its dashboards, data sources, scans, reports, and environment-scoped records.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button type="button" onClick={confirmDelete} disabled={saving} className="theme-button-danger rounded-2xl px-4 py-3 text-sm font-semibold">
+                {saving ? 'Deleting...' : 'Delete Environment'}
+              </button>
+              <button type="button" onClick={() => setPendingDeleteId(null)} className="theme-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

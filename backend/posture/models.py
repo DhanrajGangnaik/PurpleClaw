@@ -13,7 +13,7 @@ class Environment(BaseModel):
     environment_id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
     type: Literal["homelab", "lab", "staging", "production"]
-    description: str = Field(..., min_length=1)
+    description: str = Field(default="")
     status: Literal["active", "inactive"]
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

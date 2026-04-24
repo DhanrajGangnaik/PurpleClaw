@@ -28,13 +28,15 @@ export function WidgetSelectorModal({ open, definitions, onClose, onSelect }: Wi
   const categories: WidgetDefinition['category'][] = ['kpi', 'analysis', 'secondary'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8, 10, 16, 0.80)', backdropFilter: 'blur(4px)' }}>
       <Card className="w-full max-w-4xl p-6">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <p className="theme-text-faint text-[11px] font-semibold uppercase tracking-[0.18em]">Dashboard Builder</p>
             <h3 className="theme-text-primary mt-1 text-xl font-semibold">Add Widget</h3>
-            <p className="theme-text-muted mt-2 text-sm">Choose a widget type, then configure its title, data source, and display settings in the builder.</p>
+            <p className="theme-text-muted mt-2 text-sm">
+              Choose a widget type, then configure its title, data source, and display settings in the builder.
+            </p>
           </div>
           <button type="button" onClick={onClose} className="theme-button-secondary rounded-xl px-3 py-2 text-sm font-medium">
             Close
@@ -59,7 +61,7 @@ export function WidgetSelectorModal({ open, definitions, onClose, onSelect }: Wi
                       key={definition.type}
                       type="button"
                       onClick={() => onSelect(definition)}
-                      className="theme-inset theme-focus rounded-card border p-4 text-left transition hover:border-slate-400/70"
+                      className="theme-inset theme-focus rounded-2xl p-4 text-left transition"
                     >
                       <p className="theme-text-primary text-sm font-semibold">{definition.label}</p>
                       <p className="theme-text-muted mt-2 text-sm leading-6">{definition.description}</p>

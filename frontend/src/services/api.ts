@@ -170,6 +170,26 @@ export const api = axios.create({
   },
 });
 
+// Attach stored JWT to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('purpleclaw.auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On 401, signal AuthContext to clear state (no hard reload)
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      window.dispatchEvent(new CustomEvent('purpleclaw:unauthorized'));
+    }
+    return Promise.reject(error);
+  },
+);
+
 export async function getServiceStatus() {
   const response = await api.get<Record<string, string>>('/');
   return response.data;

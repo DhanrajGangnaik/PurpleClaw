@@ -27,6 +27,8 @@ def initialize_scanning() -> None:
         policy_id = f"{environment}-default"
         if policy_id in _SCAN_POLICIES:
             continue
+        if get_environment(environment) is None:
+            continue
         env_assets = list_assets(environment)
         env_inventory = list_inventory(environment)
         allowed_targets = sorted(

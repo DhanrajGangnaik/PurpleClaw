@@ -7,6 +7,19 @@ services:
       HOST: 0.0.0.0
       PORT: 8000
       SQLITE_PATH: /app/data/purpleclaw.db
+      # Auth — CHANGE THESE IN PRODUCTION
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-change-me-to-a-long-random-secret-in-production}
+      AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-480}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-purpleclaw-admin}
+      # CORS — restrict to your frontend origin in production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:5173}
+      # Optional PostgreSQL (overrides SQLite when set)
+      DATABASE_URL: ${DATABASE_URL:-}
+      # Integrations
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-}
+      LOKI_URL: ${LOKI_URL:-}
     ports:
       - "8000:8000"
     volumes:
@@ -15,7 +28,7 @@ services:
     networks:
       - purpleclaw-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/platform/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -34,7 +47,7 @@ services:
     networks:
       - purpleclaw-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

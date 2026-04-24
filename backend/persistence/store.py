@@ -668,7 +668,7 @@ def initialize_persistence() -> dict[str, object]:
         _ENVIRONMENTS.clear()
         _ENVIRONMENTS.update({environment.environment_id: environment for environment in persisted_environments})
     elif db.enabled:
-        db.upsert_many("environments", _ENVIRONMENTS.values())
+        _ENVIRONMENTS.clear()
     for environment_id in _ENVIRONMENTS:
         _PLANS.setdefault(environment_id, {})
     return db.status()
@@ -704,18 +704,36 @@ def get_environment(environment_id: str) -> Environment | None:
     return _ENVIRONMENTS.get(environment_id)
 
 
-def create_environment(name: str, environment_type: str, description: str, status: str = "active") -> Environment:
+def create_environment(
+    name: str,
+    environment_type: str | None = None,
+    description: str | None = None,
+    status: str | None = "active",
+) -> Environment:
     """Create and persist one managed environment."""
 
-    base_environment_id = _slugify_environment_name(name)
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise ValueError("Environment name is required")
+
+    normalized_type = (environment_type or "lab").strip().lower()
+    if normalized_type not in {"homelab", "lab", "staging", "production"}:
+        raise ValueError("Environment type must be one of: homelab, lab, staging, production")
+
+    normalized_status = (status or "active").strip().lower()
+    if normalized_status not in {"active", "inactive"}:
+        raise ValueError("Environment status must be one of: active, inactive")
+
+    normalized_description = (description or "").strip()
+    base_environment_id = _slugify_environment_name(normalized_name)
     environment_id = _unique_environment_id(base_environment_id)
     now = utc_now()
     environment = Environment(
         environment_id=environment_id,
-        name=name.strip(),
-        type=environment_type,
-        description=description.strip(),
-        status=status,
+        name=normalized_name,
+        type=normalized_type,
+        description=normalized_description,
+        status=normalized_status,
         created_at=now,
         updated_at=now,
     )
@@ -750,7 +768,7 @@ def update_environment(environment_id: str, name: str, environment_type: str, de
 def delete_environment(environment_id: str) -> bool:
     """Delete one managed environment and its environment-scoped records."""
 
-    if environment_id not in _ENVIRONMENTS or len(_ENVIRONMENTS) == 1:
+    if environment_id not in _ENVIRONMENTS:
         return False
 
     del _ENVIRONMENTS[environment_id]
@@ -953,7 +971,7 @@ def list_telemetry_summaries(environment_id: str | None = None) -> list[Telemetr
     active_environment_id = normalize_environment_id(environment_id)
     if _SYSTEM_MODE.mode == SystemModeName.TRACKING:
         if db.enabled and not _TRACKING_TELEMETRY_SUMMARIES:
-            return {summary.id: summary for summary in db.list_records("telemetry_summaries", TelemetrySummary, active_environment_id)}
+            return [summary for summary in db.list_records("telemetry_summaries", TelemetrySummary, active_environment_id)]
         return [summary for summary in _TRACKING_TELEMETRY_SUMMARIES.values() if summary.environment_id == active_environment_id]
 
     return [summary for summary in _DEMO_TELEMETRY_SUMMARIES.values() if summary.environment_id == active_environment_id]

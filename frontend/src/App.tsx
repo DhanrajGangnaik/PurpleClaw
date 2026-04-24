@@ -1,7 +1,10 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { useAuth } from './contexts/AuthContext';
+import { Login } from './pages/Login';
 import { useFetch } from './hooks/useFetch';
 import { Alerts } from './pages/Alerts';
 import { Automation } from './pages/Automation';
@@ -16,6 +19,7 @@ import { Scheduler } from './pages/Scheduler';
 import { ServiceHealth } from './pages/ServiceHealth';
 import { Settings } from './pages/Settings';
 import { SecuritySignals } from './pages/SecuritySignals';
+import { UserManagement } from './pages/UserManagement';
 import { Validator } from './pages/Validator';
 import {
   getAlerts,
@@ -60,7 +64,20 @@ const Scans = lazy(() => import('./pages/Scans').then((module) => ({ default: mo
 const SIDEBAR_STORAGE_KEY = 'purpleclaw.sidebar_collapsed';
 const ENVIRONMENT_STORAGE_KEY = 'purpleclaw.environment_id';
 
-function App() {
+function NoEnvironmentState({ title, message, onCreateEnvironment }: { title: string; message: string; onCreateEnvironment: () => void }) {
+  return (
+    <div className="workspace-panel p-6">
+      <p className="workspace-eyebrow">Environment Required</p>
+      <h2 className="mt-3 text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
+      <p className="mt-3 text-sm leading-6" style={{ color: 'var(--text-muted)' }}>{message}</p>
+      <button type="button" onClick={onCreateEnvironment} className="theme-button-primary mt-6 rounded-2xl px-4 py-3 text-sm font-semibold">
+        Create Environment
+      </button>
+    </div>
+  );
+}
+
+function AppShell() {
   const navigate = useNavigate();
   const [apiStatus, setApiStatus] = useState<'online' | 'offline'>('offline');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true');
@@ -135,10 +152,15 @@ function App() {
 
   const environments = environmentsFetch.data ?? [];
   const selectedEnvironment = environments.find((environment) => environment.environment_id === selectedEnvironmentId) ?? environments[0] ?? null;
+  const activeEnvironmentId = selectedEnvironment?.environment_id ?? '';
 
   const handleEnvironmentChange = (environmentId: string) => {
     setSelectedEnvironmentId(environmentId);
-    localStorage.setItem(ENVIRONMENT_STORAGE_KEY, environmentId);
+    if (environmentId) {
+      localStorage.setItem(ENVIRONMENT_STORAGE_KEY, environmentId);
+    } else {
+      localStorage.removeItem(ENVIRONMENT_STORAGE_KEY);
+    }
   };
 
   useEffect(() => {
@@ -165,6 +187,10 @@ function App() {
 
   useEffect(() => {
     if (!environments.length) {
+      if (selectedEnvironmentId) {
+        setSelectedEnvironmentId('');
+        localStorage.removeItem(ENVIRONMENT_STORAGE_KEY);
+      }
       return;
     }
     if (!selectedEnvironmentId || !environments.some((environment) => environment.environment_id === selectedEnvironmentId)) {
@@ -262,10 +288,6 @@ function App() {
     modeFetch.error ??
     automationRunsFetch.error;
 
-  if (!selectedEnvironment) {
-    return <div className="app-shell grid min-h-screen place-items-center px-6 text-center text-sm text-[var(--text-muted)]">Loading environments...</div>;
-  }
-
   return (
     <div className="app-shell">
       <div className="app-backdrop fixed inset-0" />
@@ -282,15 +304,16 @@ function App() {
         <Header
           apiStatus={apiStatus}
           environments={environments}
-          selectedEnvironmentId={selectedEnvironment.environment_id}
+          selectedEnvironmentId={activeEnvironmentId}
           onEnvironmentChange={handleEnvironmentChange}
-          onCreateEnvironmentRequest={() => navigate('/settings')}
           onManageEnvironmentRequest={() => navigate('/settings')}
           onSidebarToggle={() => setMobileSidebarOpen(true)}
         />
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8">
-          <Routes>
+        <main className="relative z-[1] px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1600px]">
+            <AppErrorBoundary>
+            <Routes>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route
               path="/home"
@@ -298,7 +321,7 @@ function App() {
                 <Home
                   environments={environments}
                   selectedEnvironment={selectedEnvironment}
-                  selectedEnvironmentId={selectedEnvironment.environment_id}
+                  selectedEnvironmentId={activeEnvironmentId}
                   dashboards={dashboards}
                   alerts={alerts}
                   scans={scans}
@@ -318,14 +341,18 @@ function App() {
               path="/dashboards"
               element={
                 <Suspense fallback={<div className="theme-text-faint py-14 text-center text-sm">Loading dashboards...</div>}>
-                  <Dashboards
-                    selectedEnvironmentId={selectedEnvironment.environment_id}
-                    dashboards={dashboards}
-                    datasources={datasources}
-                    loading={dashboardsFetch.loading || datasourcesFetch.loading}
-                    error={dashboardsFetch.error ?? datasourcesFetch.error}
-                    onDataChanged={refreshData}
-                  />
+                  {activeEnvironmentId ? (
+                    <Dashboards
+                      selectedEnvironmentId={activeEnvironmentId}
+                      dashboards={dashboards}
+                      datasources={datasources}
+                      loading={dashboardsFetch.loading || datasourcesFetch.loading}
+                      error={dashboardsFetch.error ?? datasourcesFetch.error}
+                      onDataChanged={refreshData}
+                    />
+                  ) : (
+                    <NoEnvironmentState title="No environment selected" message="Create an environment before creating dashboards." onCreateEnvironment={() => navigate('/settings')} />
+                  )}
                 </Suspense>
               }
             />
@@ -334,14 +361,18 @@ function App() {
               path="/scans"
               element={
                 <Suspense fallback={<div className="theme-text-faint py-14 text-center text-sm">Loading scans...</div>}>
-                  <Scans
-                    selectedEnvironmentId={selectedEnvironment.environment_id}
-                    policies={scanPolicies}
-                    scans={scans}
-                    loading={scanPoliciesFetch.loading || scansFetch.loading}
-                    error={scanPoliciesFetch.error ?? scansFetch.error}
-                    onDataChanged={refreshData}
-                  />
+                  {activeEnvironmentId ? (
+                    <Scans
+                      selectedEnvironmentId={activeEnvironmentId}
+                      policies={scanPolicies}
+                      scans={scans}
+                      loading={scanPoliciesFetch.loading || scansFetch.loading}
+                      error={scanPoliciesFetch.error ?? scansFetch.error}
+                      onDataChanged={refreshData}
+                    />
+                  ) : (
+                    <NoEnvironmentState title="No environment selected" message="Create an environment before running scans." onCreateEnvironment={() => navigate('/settings')} />
+                  )}
                 </Suspense>
               }
             />
@@ -349,33 +380,45 @@ function App() {
               path="/reports"
               element={
                 <Suspense fallback={<div className="theme-text-faint py-14 text-center text-sm">Loading reports...</div>}>
-                  <Reports
-                    selectedEnvironmentId={selectedEnvironment.environment_id}
-                    reports={reports}
-                    templates={reportTemplates}
-                    scans={scans}
-                    dashboards={dashboards}
-                    loading={reportsFetch.loading || reportTemplatesFetch.loading}
-                    error={reportsFetch.error ?? reportTemplatesFetch.error}
-                    onDataChanged={refreshData}
-                  />
+                  {activeEnvironmentId ? (
+                    <Reports
+                      selectedEnvironmentId={activeEnvironmentId}
+                      reports={reports}
+                      templates={reportTemplates}
+                      scans={scans}
+                      dashboards={dashboards}
+                      loading={reportsFetch.loading || reportTemplatesFetch.loading}
+                      error={reportsFetch.error ?? reportTemplatesFetch.error}
+                      onDataChanged={refreshData}
+                    />
+                  ) : (
+                    <NoEnvironmentState title="No environment selected" message="Create an environment before generating reports." onCreateEnvironment={() => navigate('/settings')} />
+                  )}
                 </Suspense>
               }
             />
             <Route
               path="/datasources"
-              element={<DataSources selectedEnvironmentId={selectedEnvironment.environment_id} datasources={datasources} loading={datasourcesFetch.loading} error={datasourcesFetch.error} onDataChanged={refreshData} />}
+              element={
+                activeEnvironmentId ? (
+                  <DataSources selectedEnvironmentId={activeEnvironmentId} datasources={datasources} loading={datasourcesFetch.loading} error={datasourcesFetch.error} onDataChanged={refreshData} />
+                ) : (
+                  <NoEnvironmentState title="No environment selected" message="Create an environment before adding data sources." onCreateEnvironment={() => navigate('/settings')} />
+                )
+              }
             />
             <Route
               path="/settings"
               element={
                 <Settings
                   environments={environments}
-                  selectedEnvironmentId={selectedEnvironment.environment_id}
+                  selectedEnvironmentId={activeEnvironmentId}
                   onEnvironmentChange={handleEnvironmentChange}
                   onEnvironmentsChanged={(nextEnvironmentId) => {
                     if (nextEnvironmentId) {
                       handleEnvironmentChange(nextEnvironmentId);
+                    } else {
+                      handleEnvironmentChange('');
                     }
                     refreshData();
                   }}
@@ -390,7 +433,7 @@ function App() {
               path="/scheduler"
               element={
                 <Scheduler
-                  selectedEnvironmentId={selectedEnvironment.environment_id}
+                  selectedEnvironmentId={activeEnvironmentId}
                   status={schedulerStatus}
                   platformHealth={platformHealth}
                   platformBackups={platformBackups}
@@ -408,7 +451,7 @@ function App() {
                 <Automation
                   mode={systemMode}
                   runs={automationRuns}
-                  selectedEnvironmentId={selectedEnvironment.environment_id}
+                  selectedEnvironmentId={activeEnvironmentId}
                   prometheus={prometheus}
                   loki={loki}
                   loading={modeFetch.loading || automationRunsFetch.loading || prometheusFetch.loading || lokiFetch.loading}
@@ -419,16 +462,32 @@ function App() {
             />
             <Route path="/plans" element={<Plans plans={plans} loading={plansFetch.loading} error={plansFetch.error} />} />
             <Route path="/executions" element={<Executions executions={executions} loading={executionsFetch.loading} error={executionsFetch.error} />} />
-            <Route path="/validator" element={<Validator selectedEnvironmentId={selectedEnvironment.environment_id} onDataChanged={refreshData} />} />
+            <Route path="/validator" element={<Validator selectedEnvironmentId={activeEnvironmentId} onDataChanged={refreshData} />} />
             <Route path="/policies" element={<Policies policies={policies} loading={policiesFetch.loading} error={policiesFetch.error} />} />
             <Route path="/remediation" element={<Remediation findings={allFindings} remediations={remediations} loading={allFindingsFetch.loading || remediationsFetch.loading} error={allFindingsFetch.error ?? remediationsFetch.error} />} />
+            <Route path="/users" element={<UserManagement />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
-          </Routes>
-          {postureError ? <div className="theme-error mt-6 rounded-2xl p-4 text-sm">{postureError}</div> : null}
+            </Routes>
+            </AppErrorBoundary>
+            {postureError ? <div className="theme-error mt-6 rounded-2xl p-4 text-sm">{postureError}</div> : null}
+          </div>
         </main>
       </div>
     </div>
   );
+}
+
+function App() {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center" style={{ background: 'var(--bg-base)' }}>
+        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</span>
+      </div>
+    );
+  }
+  if (!isAuthenticated) return <Login />;
+  return <AppShell />;
 }
 
 export default App;

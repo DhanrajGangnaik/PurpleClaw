@@ -59,6 +59,8 @@ export function Scans({ selectedEnvironmentId, policies, scans, loading, error, 
     () => scans.filter((item) => item.request.environment_id === selectedEnvironmentId),
     [scans, selectedEnvironmentId],
   );
+  const queueCount = visibleScans.filter((item) => ['queued', 'running'].includes(item.result?.status ?? item.request.status)).length;
+  const completedCount = visibleScans.filter((item) => (item.result?.status ?? item.request.status) === 'completed').length;
 
   useEffect(() => {
     const activeScan = visibleScans.some((item) => ['queued', 'running'].includes(item.result?.status ?? item.request.status));
@@ -120,74 +122,117 @@ export function Scans({ selectedEnvironmentId, policies, scans, loading, error, 
   };
 
   const generatedFindings = Array.isArray(latestResult?.result?.summary.generated_findings)
-    ? (latestResult?.result?.summary.generated_findings as Array<Record<string, unknown>>)
+    ? (latestResult.result?.summary.generated_findings as Array<Record<string, unknown>>)
     : [];
+
+  if (!selectedEnvironmentId) {
+    return (
+      <Panel title="Scans" eyebrow="Environment Required">
+        <div className="theme-text-faint py-12 text-center text-sm">Create an environment before running scans.</div>
+      </Panel>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <Panel title="Controlled Assessment Run" eyebrow="Approved Scope Only">
-        {(error || actionError) && <div className="theme-error mb-4 rounded-2xl p-4 text-sm">{error ?? actionError}</div>}
-        <div className="grid gap-4 xl:grid-cols-2">
-          <label className="space-y-2">
-            <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Target</span>
-            <input value={target} onChange={(event) => setTarget(event.target.value)} className="theme-input theme-focus w-full rounded-2xl border px-4 py-3" placeholder="asset-001 or edge-gateway-01" />
-          </label>
-          <label className="space-y-2">
-            <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Target Type</span>
-            <select value={targetType} onChange={(event) => setTargetType(event.target.value as 'asset' | 'hostname' | 'ip' | 'service')} className="theme-input theme-focus w-full rounded-2xl border px-4 py-3">
-              <option value="asset">asset</option>
-              <option value="hostname">hostname</option>
-              <option value="ip">ip</option>
-              <option value="service">service</option>
-            </select>
-          </label>
-          <label className="space-y-2">
-            <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Depth</span>
-            <select value={depth} onChange={(event) => setDepth(event.target.value as 'light' | 'standard')} className="theme-input theme-focus w-full rounded-2xl border px-4 py-3">
-              <option value="light">light</option>
-              <option value="standard">standard</option>
-            </select>
-          </label>
-          <label className="space-y-2">
-            <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Requested By</span>
-            <input value={requestedBy} onChange={(event) => setRequestedBy(event.target.value)} className="theme-input theme-focus w-full rounded-2xl border px-4 py-3" placeholder="analyst@purpleclaw.local" />
-          </label>
-        </div>
-        <label className="mt-4 block space-y-2">
-          <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Notes</span>
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="theme-input theme-focus min-h-24 w-full rounded-2xl border px-4 py-3" placeholder="Reason for the approved assessment request." />
-        </label>
-        <div className="mt-4">
-          <p className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Scan Types</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {availableScanTypes.map((scanType) => (
-              <label key={scanType} className="theme-inset flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm">
-                <input type="checkbox" checked={selectedScanTypes.includes(scanType)} onChange={() => handleToggle(scanType)} />
-                <span>{scanType}</span>
-              </label>
-            ))}
+      <div className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
+        <Panel title="Controlled Assessment Run" eyebrow="Approved Scope Only" description="Targeted operator-driven scans with policy boundaries enforced by the existing API workflow.">
+          {(error || actionError) ? <div className="theme-error mb-4 rounded-2xl p-4 text-sm">{error ?? actionError}</div> : null}
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <label className="space-y-2">
+              <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Target</span>
+              <input value={target} onChange={(event) => setTarget(event.target.value)} className="theme-input theme-focus rounded-2xl px-4 py-3" placeholder="asset-001 or edge-gateway-01" />
+            </label>
+            <label className="space-y-2">
+              <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Target Type</span>
+              <select value={targetType} onChange={(event) => setTargetType(event.target.value as 'asset' | 'hostname' | 'ip' | 'service')} className="theme-input theme-focus rounded-2xl px-4 py-3">
+                <option value="asset">asset</option>
+                <option value="hostname">hostname</option>
+                <option value="ip">ip</option>
+                <option value="service">service</option>
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Depth</span>
+              <select value={depth} onChange={(event) => setDepth(event.target.value as 'light' | 'standard')} className="theme-input theme-focus rounded-2xl px-4 py-3">
+                <option value="light">light</option>
+                <option value="standard">standard</option>
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Requested By</span>
+              <input value={requestedBy} onChange={(event) => setRequestedBy(event.target.value)} className="theme-input theme-focus rounded-2xl px-4 py-3" placeholder="analyst@purpleclaw.local" />
+            </label>
           </div>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button type="button" onClick={handleRun} disabled={running || !target.trim() || selectedScanTypes.length === 0} className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold">
-            {running ? 'Running...' : 'Run Scan'}
-          </button>
-          {activePolicy && <StatusBadge label={`Policy ${activePolicy.max_depth}`} tone="cyan" />}
-        </div>
-      </Panel>
+
+          <label className="mt-4 block space-y-2">
+            <span className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Notes</span>
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="theme-input theme-focus min-h-24 rounded-2xl px-4 py-3" placeholder="Reason for the approved assessment request." />
+          </label>
+
+          <div className="mt-4">
+            <p className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Scan Types</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {availableScanTypes.map((scanType) => (
+                <label key={scanType} className="theme-inset flex items-center gap-3 rounded-2xl px-4 py-3 text-sm">
+                  <input type="checkbox" checked={selectedScanTypes.includes(scanType)} onChange={() => handleToggle(scanType)} />
+                  <span>{scanType}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="button" onClick={handleRun} disabled={running || !target.trim() || selectedScanTypes.length === 0} className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold">
+              {running ? 'Running...' : 'Run Scan'}
+            </button>
+            {activePolicy ? <StatusBadge label={`Policy ${activePolicy.max_depth}`} tone="cyan" /> : null}
+          </div>
+        </Panel>
+
+        <Panel title="Queue Status" eyebrow="Operations" description="Overview of scan throughput, policy readiness, and current queue state.">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+            <div className="workspace-stat">
+              <p className="workspace-eyebrow">Queued / Running</p>
+              <p className="mt-3 text-3xl font-semibold" style={{ color: 'var(--text-primary)' }}>{queueCount}</p>
+            </div>
+            <div className="workspace-stat">
+              <p className="workspace-eyebrow">Completed</p>
+              <p className="mt-3 text-3xl font-semibold" style={{ color: 'var(--text-primary)' }}>{completedCount}</p>
+            </div>
+            <div className="workspace-subpanel p-4">
+              <p className="workspace-eyebrow">Policy Status</p>
+              {activePolicy ? (
+                <div className="mt-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge label={activePolicy.name} tone="purple" />
+                    <StatusBadge label={activePolicy.enabled ? 'enabled' : 'disabled'} tone={activePolicy.enabled ? 'green' : 'red'} />
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Approved checks: {activePolicy.allowed_scan_types.length} · Max depth {activePolicy.max_depth}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>No enabled scan policy is available for this environment.</p>
+              )}
+            </div>
+          </div>
+        </Panel>
+      </div>
 
       <Panel title="Scope Controls" eyebrow="Policy Enforcement">
         {activePolicy ? (
           <div className="grid gap-4 xl:grid-cols-3">
-            <div className="theme-inset rounded-2xl border p-4">
+            <div className="theme-inset rounded-2xl p-4">
               <p className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Allowed Targets</p>
               <p className="theme-text-muted mt-3 text-sm leading-6">{activePolicy.allowed_targets.join(', ') || 'No explicit targets'}</p>
             </div>
-            <div className="theme-inset rounded-2xl border p-4">
+            <div className="theme-inset rounded-2xl p-4">
               <p className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Allowed Network Ranges</p>
               <p className="theme-text-muted mt-3 text-sm leading-6">{activePolicy.allowed_network_ranges.join(', ') || 'No IP ranges approved'}</p>
             </div>
-            <div className="theme-inset rounded-2xl border p-4">
+            <div className="theme-inset rounded-2xl p-4">
               <p className="theme-text-faint text-xs font-bold uppercase tracking-[0.18em]">Approved Checks</p>
               <p className="theme-text-muted mt-3 text-sm leading-6">{activePolicy.allowed_scan_types.join(', ')}</p>
             </div>
@@ -197,56 +242,79 @@ export function Scans({ selectedEnvironmentId, policies, scans, loading, error, 
         )}
       </Panel>
 
-      <Panel title="Latest Result" eyebrow="Assessment Outcome">
-        {latestResult ? (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <StatusBadge label={latestResult.result?.status ?? latestResult.request.status} tone={tone(latestResult.result?.status ?? latestResult.request.status)} />
-              <span className="theme-text-primary font-medium">{latestResult.request.target}</span>
-              <span className="theme-text-muted text-sm">{latestResult.result?.findings_created ?? 0} findings created</span>
-            </div>
-            <JsonPanel value={latestResult.result?.summary ?? latestResult} emptyText="No scan result available yet." />
-            <div className="grid gap-4 xl:grid-cols-2">
-              <Panel title="Generated Findings" eyebrow="Summary" className="p-0">
-                <div className="space-y-3">
-                  {generatedFindings.length === 0 ? (
-                    <div className="theme-text-faint text-sm">No generated findings for the latest run.</div>
-                  ) : (
-                    generatedFindings.map((item) => (
-                      <div key={`${item.title}-${item.score}`} className="theme-inset rounded-2xl border p-4">
-                        <div className="flex items-center gap-3">
-                          <StatusBadge label={String(item.severity)} tone={String(item.severity) === 'high' ? 'red' : String(item.severity) === 'medium' ? 'purple' : 'cyan'} />
-                          <span className="theme-text-primary font-medium">{String(item.title)}</span>
+      <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+        <Panel title="Latest Result" eyebrow="Assessment Outcome" description="Summary of the most recent run, including findings generated and linked evidence.">
+          {latestResult ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge label={latestResult.result?.status ?? latestResult.request.status} tone={tone(latestResult.result?.status ?? latestResult.request.status)} />
+                <span className="theme-text-primary font-medium">{latestResult.request.target}</span>
+                <span className="theme-text-muted text-sm">{latestResult.result?.findings_created ?? 0} findings created</span>
+              </div>
+              <JsonPanel value={latestResult.result?.summary ?? latestResult} emptyText="No scan result available yet." />
+              <div className="grid gap-4 xl:grid-cols-2">
+                <Panel title="Generated Findings" eyebrow="Summary" className="p-0">
+                  <div className="space-y-3">
+                    {generatedFindings.length === 0 ? (
+                      <div className="theme-text-faint text-sm">No generated findings for the latest run.</div>
+                    ) : (
+                      generatedFindings.map((item) => (
+                        <div key={`${item.title}-${item.score}`} className="theme-inset rounded-2xl p-4">
+                          <div className="flex items-center gap-3">
+                            <StatusBadge label={String(item.severity)} tone={String(item.severity) === 'high' ? 'red' : String(item.severity) === 'medium' ? 'purple' : 'cyan'} />
+                            <span className="theme-text-primary font-medium">{String(item.title)}</span>
+                          </div>
+                          <p className="theme-text-muted mt-2 text-sm leading-6">{String(item.evidence_summary ?? '')}</p>
                         </div>
-                        <p className="theme-text-muted mt-2 text-sm leading-6">{String(item.evidence_summary ?? '')}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Panel>
-              <Panel title="Related Findings" eyebrow="Existing Context" className="p-0">
-                <div className="space-y-3">
-                  {latestResult.related_findings.length === 0 ? (
-                    <div className="theme-text-faint text-sm">No related findings were mapped for this target.</div>
-                  ) : (
-                    latestResult.related_findings.map((item) => (
-                      <div key={item.id} className="theme-inset rounded-2xl border p-4">
-                        <div className="flex items-center gap-3">
-                          <StatusBadge label={item.severity} tone={item.severity === 'critical' || item.severity === 'high' ? 'red' : item.severity === 'medium' ? 'purple' : 'cyan'} />
-                          <span className="theme-text-primary font-medium">{item.title}</span>
+                      ))
+                    )}
+                  </div>
+                </Panel>
+                <Panel title="Related Findings" eyebrow="Existing Context" className="p-0">
+                  <div className="space-y-3">
+                    {latestResult.related_findings.length === 0 ? (
+                      <div className="theme-text-faint text-sm">No related findings were mapped for this target.</div>
+                    ) : (
+                      latestResult.related_findings.map((item) => (
+                        <div key={item.id} className="theme-inset rounded-2xl p-4">
+                          <div className="flex items-center gap-3">
+                            <StatusBadge label={item.severity} tone={item.severity === 'critical' || item.severity === 'high' ? 'red' : item.severity === 'medium' ? 'purple' : 'cyan'} />
+                            <span className="theme-text-primary font-medium">{item.title}</span>
+                          </div>
+                          <p className="theme-text-muted mt-2 text-sm">Risk Score {item.score} · {item.status}</p>
                         </div>
-                        <p className="theme-text-muted mt-2 text-sm">Risk Score {item.score} - {item.status}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Panel>
+                      ))
+                    )}
+                  </div>
+                </Panel>
+              </div>
             </div>
+          ) : (
+            <div className="theme-text-faint py-14 text-center text-sm">Run an approved assessment to see scan status, findings created, summary, and related findings.</div>
+          )}
+        </Panel>
+
+        <Panel title="Status Timeline" eyebrow="Run Feed" description="Compact audit trail of recent assessment activity in this environment.">
+          <div className="space-y-3">
+            {visibleScans.slice(0, 5).map((scan) => {
+              const status = scan.result?.status ?? scan.request.status;
+              return (
+                <div key={scan.request.scan_id} className="workspace-subpanel p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{scan.request.target}</p>
+                      <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{scan.request.scan_types.join(', ')}</p>
+                    </div>
+                    <StatusBadge label={status} tone={tone(status)} />
+                  </div>
+                  <p className="mt-3 text-xs" style={{ color: 'var(--text-disabled)' }}>{formatDate(scan.result?.completed_at ?? scan.result?.started_at ?? scan.request.requested_at)}</p>
+                </div>
+              );
+            })}
+            {!visibleScans.length ? <div className="theme-text-faint text-sm">No scan activity recorded yet.</div> : null}
           </div>
-        ) : (
-          <div className="theme-text-faint py-14 text-center text-sm">Run an approved assessment to see scan status, findings created, summary, and related findings.</div>
-        )}
-      </Panel>
+        </Panel>
+      </div>
 
       <Panel title="Recent Assessments" eyebrow="Run History">
         {loading ? (

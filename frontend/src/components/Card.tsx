@@ -6,5 +6,5 @@ interface CardProps {
 }
 
 export function Card({ children, className = '' }: CardProps) {
-  return <section className={`theme-surface rounded-card border ${className}`}>{children}</section>;
+  return <section className={`workspace-panel ${className}`}>{children}</section>;
 }

@@ -13,7 +13,7 @@ interface PanelProps {
 
 export function Panel({ title, eyebrow, description, children, action, className = '' }: PanelProps) {
   return (
-    <Card className={`p-5 ${className}`}>
+    <Card className={`p-5 sm:p-6 ${className}`}>
       <SectionHeader title={title} eyebrow={eyebrow} description={description} action={action} />
       {children}
     </Card>

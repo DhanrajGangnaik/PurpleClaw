@@ -92,7 +92,7 @@ def _report_list(environment_id: str, widget: dict[str, Any]) -> dict[str, Any]:
     from reports import list_reports
 
     limit = int(widget.get("limit", 5))
-    reports = list_reports()
+    reports = list_reports(environment_id)
     return {**widget, "data": [report.model_dump(mode="json") for report in reports[:limit]]}
 
 

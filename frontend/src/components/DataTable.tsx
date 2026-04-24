@@ -16,7 +16,7 @@ interface DataTableProps<T> {
 
 export function DataTable<T>({ columns, rows, getRowKey, emptyText, onRowClick }: DataTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-card border theme-surface-strong">
+    <div className="overflow-hidden rounded-2xl border theme-surface-strong">
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead style={{ background: 'var(--table-head)' }}>
@@ -40,14 +40,8 @@ export function DataTable<T>({ columns, rows, getRowKey, emptyText, onRowClick }
                 <tr
                   key={getRowKey(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={`border-b transition-colors duration-150 ${onRowClick ? 'cursor-pointer' : ''}`}
-                  style={{ borderColor: 'var(--table-row)' }}
-                  onMouseEnter={(event) => {
-                    event.currentTarget.style.background = 'var(--table-hover)';
-                  }}
-                  onMouseLeave={(event) => {
-                    event.currentTarget.style.background = 'transparent';
-                  }}
+                  className={`border-b transition-colors duration-150 ${onRowClick ? 'cursor-pointer hover:bg-[var(--table-hover)]' : ''}`}
+                  style={{ borderColor: 'var(--border)' }}
                 >
                   {columns.map((column) => (
                     <td key={column.key} className="theme-text-secondary px-4 py-4 text-sm align-top">

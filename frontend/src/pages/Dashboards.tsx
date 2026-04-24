@@ -104,6 +104,7 @@ export function Dashboards({ selectedEnvironmentId, dashboards, datasources, loa
     [datasources, selectedEnvironmentId],
   );
   const groupedWidgets = useMemo(() => groupWidgets(renderFetch.data?.widgets ?? []), [renderFetch.data?.widgets]);
+  const freshnessTone = renderFetch.data?.data_freshness.status === 'fresh' ? 'green' : 'amber';
 
   useEffect(() => {
     if (!activeDashboard) {
@@ -171,22 +172,31 @@ export function Dashboards({ selectedEnvironmentId, dashboards, datasources, loa
     );
   }
 
+  if (!selectedEnvironmentId) {
+    return <WidgetEmptyState message="Create an environment before creating dashboards." />;
+  }
+
   return (
     <div className="space-y-6">
-      <WidgetSelectorModal open={showSelector} definitions={widgetDefinitions} onClose={() => setShowSelector(false)} onSelect={(definition) => {
-        if (widgets.length >= 8) {
-          return;
-        }
-        setWidgets((current) => [...current, createDraftWidget(definition)]);
-        setShowSelector(false);
-      }} />
+      <WidgetSelectorModal
+        open={showSelector}
+        definitions={widgetDefinitions}
+        onClose={() => setShowSelector(false)}
+        onSelect={(definition) => {
+          if (widgets.length >= 8) {
+            return;
+          }
+          setWidgets((current) => [...current, createDraftWidget(definition)]);
+          setShowSelector(false);
+        }}
+      />
 
       {(error || actionError) ? <div className="theme-error rounded-2xl p-4 text-sm">{error ?? actionError}</div> : null}
 
       <Panel
-        title="Dashboards"
-        eyebrow="Reduced Workspace"
-        description="Dashboards are capped to a small set of primary widgets so the page stays readable."
+        title="Operational Dashboards"
+        eyebrow="SOC Workspace"
+        description="Curated dashboard views for the active environment. Widgets remain functional, but the page now emphasizes hierarchy, freshness, and service context."
         action={
           <div className="flex flex-wrap items-center gap-3">
             <StatusBadge label={`${Math.min(widgets.length, 8)}/8 widgets`} tone="slate" />
@@ -196,70 +206,109 @@ export function Dashboards({ selectedEnvironmentId, dashboards, datasources, loa
           </div>
         }
       >
-        <div className="grid gap-4 lg:grid-cols-[1fr,auto] lg:items-center">
-          <label className="grid gap-2">
-            <span className="theme-text-faint text-[11px] font-semibold uppercase tracking-[0.18em]">Active Dashboard</span>
-            <select
-              value={activeDashboard?.dashboard_id ?? ''}
-              onChange={(event) => setSelectedDashboardId(event.target.value)}
-              className="theme-input theme-focus rounded-2xl border px-4 py-3"
-            >
-              {visibleDashboards.map((dashboard) => (
-                <option key={dashboard.dashboard_id} value={dashboard.dashboard_id}>
-                  {dashboard.name}
-                </option>
-              ))}
-              {!visibleDashboards.length ? <option value="">No dashboards yet</option> : null}
-            </select>
-          </label>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedDashboardId('');
-                setName('New Dashboard');
-                setDescription('');
-                setWidgets(defaultWidgets);
-                setIsEditing(true);
-              }}
-              className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold transition"
-            >
-              New Dashboard
-            </button>
-            <button type="button" onClick={() => void renderFetch.refetch()} className="theme-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold transition">
-              Refresh
-            </button>
+        <div className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+          <div className="grid gap-4">
+            <div className="grid gap-4 lg:grid-cols-[1fr,auto] lg:items-center">
+              <label className="grid gap-2">
+                <span className="theme-text-faint text-[11px] font-semibold uppercase tracking-[0.18em]">Active Dashboard</span>
+                <select
+                  value={activeDashboard?.dashboard_id ?? ''}
+                  onChange={(event) => setSelectedDashboardId(event.target.value)}
+                  className="theme-input theme-focus rounded-2xl px-4 py-3"
+                >
+                  {visibleDashboards.map((dashboard) => (
+                    <option key={dashboard.dashboard_id} value={dashboard.dashboard_id}>
+                      {dashboard.name}
+                    </option>
+                  ))}
+                  {!visibleDashboards.length ? <option value="">No dashboards yet</option> : null}
+                </select>
+              </label>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedDashboardId('');
+                    setName('New Dashboard');
+                    setDescription('');
+                    setWidgets(defaultWidgets);
+                    setIsEditing(true);
+                  }}
+                  className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold transition"
+                >
+                  New Dashboard
+                </button>
+                <button type="button" onClick={() => void renderFetch.refetch()} className="theme-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold transition">
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="workspace-stat">
+                <p className="workspace-eyebrow">Views</p>
+                <p className="mt-3 text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{visibleDashboards.length}</p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Dashboards scoped to this environment</p>
+              </div>
+              <div className="workspace-stat">
+                <p className="workspace-eyebrow">Data Sources</p>
+                <p className="mt-3 text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{environmentDatasources.length}</p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Registered sources available to widgets</p>
+              </div>
+              <div className="workspace-stat">
+                <p className="workspace-eyebrow">Freshness</p>
+                <div className="mt-3">
+                  <StatusBadge label={renderFetch.data?.data_freshness.status ?? 'unknown'} tone={freshnessTone} />
+                </div>
+                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {renderFetch.data?.data_freshness.latest_observed_at ? `Last observed ${new Date(renderFetch.data.data_freshness.latest_observed_at).toLocaleString()}` : 'No observation timestamp available'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="workspace-subpanel p-4">
+            <p className="workspace-eyebrow">Operational Summary</p>
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: 'var(--text-muted)' }}>Rendered widgets</span>
+                <span style={{ color: 'var(--text-primary)' }}>{renderFetch.data?.widgets.length ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: 'var(--text-muted)' }}>Datasource count</span>
+                <span style={{ color: 'var(--text-primary)' }}>{renderFetch.data?.datasource_count ?? environmentDatasources.length}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span style={{ color: 'var(--text-muted)' }}>Observed records</span>
+                <span style={{ color: 'var(--text-primary)' }}>{renderFetch.data?.data_freshness.record_count ?? 0}</span>
+              </div>
+            </div>
           </div>
         </div>
       </Panel>
 
       {isEditing ? (
-        <Panel title="Dashboard Editor" description="Keep the layout to six to eight widgets and prioritize the sections that matter most.">
+        <Panel title="Dashboard Editor" eyebrow="Layout Control" description="Keep the layout focused. The editor still uses the same persistence path and widget configuration API.">
           <div className="grid gap-4">
-            <input className="theme-input theme-focus rounded-2xl border px-4 py-3" value={name} onChange={(event) => setName(event.target.value)} placeholder="Dashboard name" />
-            <textarea
-              className="theme-input theme-focus min-h-24 rounded-2xl border px-4 py-3"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Short description"
-            />
+            <input className="theme-input theme-focus rounded-2xl px-4 py-3" value={name} onChange={(event) => setName(event.target.value)} placeholder="Dashboard name" />
+            <textarea className="theme-input theme-focus min-h-24 rounded-2xl px-4 py-3" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Short description" />
 
             <div className="space-y-3">
               {widgets.slice(0, 8).map((widget, index) => (
-                <div key={widget.widget_id} className="theme-inset grid gap-3 rounded-2xl border p-4 lg:grid-cols-[1.2fr,1fr,90px,auto] lg:items-center">
+                <div key={widget.widget_id} className="theme-inset grid gap-3 rounded-2xl p-4 lg:grid-cols-[1.2fr,1fr,90px,auto] lg:items-center">
                   <input
-                    className="theme-input theme-focus rounded-2xl border px-4 py-3"
+                    className="theme-input theme-focus rounded-2xl px-4 py-3"
                     value={widget.title}
                     onChange={(event) => setWidgets((current) => current.map((item) => (item.widget_id === widget.widget_id ? { ...item, title: event.target.value } : item)))}
                   />
                   <select
-                    className="theme-input theme-focus rounded-2xl border px-4 py-3"
+                    className="theme-input theme-focus rounded-2xl px-4 py-3"
                     value={widget.datasource}
                     onChange={(event) => setWidgets((current) => current.map((item) => (item.widget_id === widget.widget_id ? { ...item, datasource: event.target.value } : item)))}
                   >
                     <option value="">Auto</option>
                     {environmentDatasources.map((datasource) => (
-                      <option key={datasource.datasource_id} value={datasource.datasource_id}>
+                      <option key={datasource.datasource_id} value={datasource.type}>
                         {datasource.name}
                       </option>
                     ))}
@@ -267,66 +316,90 @@ export function Dashboards({ selectedEnvironmentId, dashboards, datasources, loa
                   <input
                     type="number"
                     min={1}
-                    max={10}
-                    className="theme-input theme-focus rounded-2xl border px-4 py-3"
+                    max={20}
+                    className="theme-input theme-focus rounded-2xl px-4 py-3"
                     value={widget.limit}
-                    onChange={(event) => setWidgets((current) => current.map((item) => (item.widget_id === widget.widget_id ? { ...item, limit: Number(event.target.value) } : item)))}
+                    onChange={(event) => setWidgets((current) => current.map((item) => (item.widget_id === widget.widget_id ? { ...item, limit: Number(event.target.value) || 1 } : item)))}
                   />
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => setWidgets((current) => current.filter((item) => item.widget_id !== widget.widget_id))} className="theme-button-secondary rounded-2xl px-3 py-2 text-sm font-semibold transition">
+                    <button type="button" onClick={() => setWidgets((current) => current.filter((item) => item.widget_id !== widget.widget_id))} className="theme-button-secondary rounded-2xl px-3 py-3 text-sm font-semibold">
                       Remove
                     </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setWidgets((current) => {
-                          if (index === 0) {
-                            return current;
-                          }
-                          const next = [...current];
-                          [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                          return next;
-                        })
-                      }
-                      className="theme-button-secondary rounded-2xl px-3 py-2 text-sm font-semibold transition"
-                    >
-                      Up
-                    </button>
+                    {index === widgets.slice(0, 8).length - 1 ? (
+                      <button type="button" onClick={() => setShowSelector(true)} className="theme-button-secondary rounded-2xl px-3 py-3 text-sm font-semibold">
+                        Add
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ))}
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={() => setShowSelector(true)} disabled={widgets.length >= 8} className="theme-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-40">
-                Add Widget
-              </button>
-              <button type="button" onClick={() => void handleSave()} disabled={saving} className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-60">
+              <button type="button" onClick={handleSave} disabled={saving} className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold">
                 {saving ? 'Saving...' : 'Save Dashboard'}
+              </button>
+              <button type="button" onClick={() => setShowSelector(true)} className="theme-button-secondary rounded-2xl px-4 py-3 text-sm font-semibold">
+                Add Widget
               </button>
             </div>
           </div>
         </Panel>
       ) : null}
 
-      {loading || renderFetch.loading ? <WidgetLoadingState /> : null}
+      {activeDashboard ? (
+        <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
+          <Panel title={activeDashboard.name} eyebrow="Selected View" description={activeDashboard.description ?? 'No description provided.'}>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="workspace-stat">
+                <p className="workspace-eyebrow">Status</p>
+                <div className="mt-3">
+                  <StatusBadge label={renderFetch.data?.data_freshness.status ?? 'unknown'} tone={freshnessTone} />
+                </div>
+              </div>
+              <div className="workspace-stat">
+                <p className="workspace-eyebrow">Updated</p>
+                <p className="mt-3 text-sm" style={{ color: 'var(--text-primary)' }}>{activeDashboard.updated_at ? new Date(activeDashboard.updated_at).toLocaleString() : 'Unknown'}</p>
+              </div>
+              <div className="workspace-stat">
+                <p className="workspace-eyebrow">Widgets</p>
+                <p className="mt-3 text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>{activeDashboard.widgets.length}</p>
+              </div>
+            </div>
+          </Panel>
 
-      {!loading && !renderFetch.loading && !renderFetch.data ? (
-        <div className="space-y-4">
-          <WidgetEmptyState message="No dashboard selected yet. Create one to populate this environment with a focused set of widgets." />
-          <button type="button" onClick={() => setIsEditing(true)} className="theme-button-primary rounded-2xl px-4 py-3 text-sm font-semibold transition">
-            Create Dashboard
-          </button>
+          <Panel title="Service Health Panel" eyebrow="Metadata" description="Widget data freshness and datasource readiness for this dashboard render.">
+            <div className="space-y-3">
+              {environmentDatasources.length === 0 ? (
+                <div className="theme-text-faint text-sm">No data sources registered for this environment.</div>
+              ) : (
+                environmentDatasources.slice(0, 5).map((source) => (
+                  <div key={source.datasource_id} className="workspace-subpanel p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{source.name}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{source.type}</p>
+                      </div>
+                      <StatusBadge label={source.status} tone={source.status === 'enabled' ? 'green' : source.status === 'error' ? 'red' : 'slate'} />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Panel>
         </div>
       ) : null}
 
-      {!loading && renderFetch.data ? (
+      {loading ? <WidgetLoadingState /> : null}
+      {!loading && !activeDashboard ? <WidgetEmptyState message="Create a dashboard to render widgets for this environment." /> : null}
+      {!loading && activeDashboard && !renderFetch.loading ? (
         <div className="space-y-6">
-          {renderSection('Primary Metrics', 'Keep the top row small and immediately scannable.', groupedWidgets.metrics, 'kpi')}
-          {renderSection('Operational Focus', 'This section carries the main analyst workflow.', groupedWidgets.primary, 'primary')}
-          {renderSection('Supporting Context', 'Secondary context stays below the primary views.', groupedWidgets.secondary, 'secondary')}
+          {renderSection('KPI Row', 'High-level environment metrics and posture indicators.', groupedWidgets.metrics, 'kpi')}
+          {renderSection('Operational Overview', 'Primary dashboards for findings, risky assets, and service context.', groupedWidgets.primary, 'primary')}
+          {renderSection('Secondary Context', 'Supporting summaries for telemetry, reports, alerts, and signals.', groupedWidgets.secondary, 'secondary')}
         </div>
       ) : null}
+      {renderFetch.loading ? <WidgetLoadingState /> : null}
     </div>
   );
 }

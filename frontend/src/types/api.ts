@@ -19,9 +19,7 @@ export interface ManagedEnvironment {
 
 export interface EnvironmentCreateRequest {
   name: string;
-  type: ManagedEnvironmentType;
-  description: string;
-  status: ManagedEnvironmentStatus;
+  description?: string;
 }
 
 export interface EnvironmentUpdateRequest {
