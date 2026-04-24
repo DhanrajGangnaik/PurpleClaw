@@ -30,3 +30,9 @@ frontend/dist/
 backend/data/*.db
 backend/data/*.db-*
 backend/data/backups/*.db
+
+# AI tool artifacts
+.claude/
+.cursor/
+.codex/
+*.log
