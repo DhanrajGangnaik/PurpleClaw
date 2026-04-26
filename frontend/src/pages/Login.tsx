@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { Shield } from 'lucide-react';
 
 export function Login() {
   const { login, loading } = useAuth();
@@ -7,98 +8,40 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    try {
-      await login(username, password);
-    } catch {
-      setError('Invalid username or password.');
-    }
+    try { await login(username, password); }
+    catch { setError('Invalid credentials. Try admin / PurpleClaw@2024!'); }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4" style={{ background: 'var(--bg-base)' }}>
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div
-            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-white font-bold text-lg"
-            style={{ background: 'var(--gradient-brand)' }}
-          >
-            PC
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center mb-4">
+            <Shield className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-            PurpleClaw
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Sign in to your workspace
-          </p>
+          <h1 className="text-xl font-bold text-white">PurpleClaw</h1>
+          <p className="text-sm text-gray-500 mt-1">Purple Team Security Platform</p>
         </div>
 
-        <div
-          className="rounded-2xl border p-6"
-          style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
-        >
-          <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                Username
-              </label>
-              <input
-                type="text"
-                autoComplete="username"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition-colors focus:ring-2"
-                style={{
-                  background: 'var(--bg-base)',
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-                placeholder="admin"
-              />
-            </div>
+        <form onSubmit={submit} className="card p-6 space-y-4">
+          {error && <p className="text-sm text-red-400 bg-red-900/20 border border-red-800/50 rounded-lg px-3 py-2">{error}</p>}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Username</label>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" required autoFocus />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+          </div>
+          <button type="submit" disabled={loading} className="btn-primary w-full py-2.5 disabled:opacity-60">
+            {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
 
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition-colors focus:ring-2"
-                style={{
-                  background: 'var(--bg-base)',
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-                placeholder="••••••••"
-              />
-            </div>
-
-            {error && (
-              <p className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--status-critical-bg, #fef2f2)', color: 'var(--status-critical)' }}>
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !username || !password}
-              className="theme-button-primary w-full rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-
-          <p className="mt-4 text-center text-[11px]" style={{ color: 'var(--text-disabled)' }}>
-            Default: <span className="font-mono">admin</span> / <span className="font-mono">purpleclaw-admin</span>
-          </p>
-        </div>
+        <p className="text-center text-xs text-gray-700 mt-4">Default: admin / PurpleClaw@2024!</p>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { WidgetEmptyState } from '../WidgetEmptyState';
-import { getReportDownloadUrl } from '../../../services/api';
 import type { ReportListWidgetPayload } from '../../../types/api';
+
+const getReportDownloadUrl = (id: string) => `/api/v1/reports/${id}/download`;
 
 interface ReportListWidgetProps {
   widget: ReportListWidgetPayload;

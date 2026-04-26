@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getErrorMessage } from '../services/api';
 
 export function useFetch<T>(loader: () => Promise<T>, dependencies: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -9,20 +8,16 @@ export function useFetch<T>(loader: () => Promise<T>, dependencies: unknown[] = 
   const refetch = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
-      const result = await loader();
-      setData(result);
-    } catch (fetchError) {
-      setError(getErrorMessage(fetchError));
+      setData(await loader());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   }, dependencies);
 
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
+  useEffect(() => { void refetch(); }, [refetch]);
 
   return { data, loading, error, refetch };
 }

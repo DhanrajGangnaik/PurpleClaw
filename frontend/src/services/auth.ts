@@ -1,12 +1,13 @@
 import axios from 'axios';
 
-const BASE = '/api';
+const BASE = '/api/v1';
 
 export interface AuthUser {
-  user_id: string;
+  id: number;
   username: string;
   email: string;
-  role: 'admin' | 'analyst' | 'viewer';
+  full_name: string;
+  role: string;
   is_active: boolean;
   created_at: string;
 }
@@ -14,27 +15,17 @@ export interface AuthUser {
 export interface AuthToken {
   access_token: string;
   token_type: string;
-  expires_in: number;
   user: AuthUser;
-}
-
-export interface UserCreateRequest {
-  username: string;
-  email?: string;
-  password: string;
-  role: AuthUser['role'];
-}
-
-export interface UserUpdateRequest {
-  email?: string;
-  role?: AuthUser['role'];
-  is_active?: boolean;
-  password?: string;
 }
 
 export const authApi = {
   async login(username: string, password: string): Promise<AuthToken> {
-    const { data } = await axios.post<AuthToken>(`${BASE}/auth/login`, { username, password });
+    const form = new URLSearchParams();
+    form.append('username', username);
+    form.append('password', password);
+    const { data } = await axios.post<AuthToken>(`${BASE}/auth/login`, form, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
     return data;
   },
 
@@ -43,32 +34,5 @@ export const authApi = {
       headers: { Authorization: `Bearer ${token}` },
     });
     return data;
-  },
-
-  async listUsers(token: string): Promise<AuthUser[]> {
-    const { data } = await axios.get<AuthUser[]>(`${BASE}/auth/users`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return data;
-  },
-
-  async createUser(token: string, payload: UserCreateRequest): Promise<AuthUser> {
-    const { data } = await axios.post<AuthUser>(`${BASE}/auth/users`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return data;
-  },
-
-  async updateUser(token: string, userId: string, payload: UserUpdateRequest): Promise<AuthUser> {
-    const { data } = await axios.patch<AuthUser>(`${BASE}/auth/users/${userId}`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return data;
-  },
-
-  async deleteUser(token: string, userId: string): Promise<void> {
-    await axios.delete(`${BASE}/auth/users/${userId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
   },
 };
