@@ -12,11 +12,11 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getDashboardStats(), getDashboardAlertsTrend(), getDashboardTopThreats()])
+    Promise.allSettled([getDashboardStats(), getDashboardAlertsTrend(), getDashboardTopThreats()])
       .then(([s, t, th]) => {
-        setStats(s as Record<string, number>);
-        setTrend(t);
-        setThreats(th);
+        if (s.status === 'fulfilled') setStats(s.value as Record<string, number>);
+        if (t.status === 'fulfilled') setTrend(t.value as unknown[]);
+        if (th.status === 'fulfilled') setThreats(th.value as unknown[]);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -32,7 +32,7 @@ export function Dashboard() {
           <MetricCard label="Active Incidents" value={stats.active_incidents ?? 0} color="orange" />
           <MetricCard label="Total Assets" value={stats.total_assets ?? 0} color="blue" />
           <MetricCard label="Critical Findings" value={stats.critical_findings ?? 0} color="red" />
-          <MetricCard label="Active IOCs" value={stats.active_iocs ?? 0} color="purple" />
+          <MetricCard label="Active IOCs" value={stats.active_iocs ?? stats.ioc_count ?? 0} color="purple" />
           <MetricCard label="Coverage %" value={`${stats.mitre_coverage ?? 0}%`} color="green" />
         </div>
 

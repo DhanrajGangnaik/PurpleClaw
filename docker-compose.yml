@@ -5,16 +5,53 @@ services:
       dockerfile: Dockerfile
     container_name: purpleclaw-backend
     environment:
-      DATABASE_URL: sqlite:////app/data/purpleclaw.db
+      # Database — leave empty for embedded SQLite, or set PostgreSQL URL
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/purpleclaw.db}
+
+      # Auth
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-change-this-to-a-long-random-secret-in-prod}
       AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-480}
+
+      # Bootstrap admin account (change immediately after first login)
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-PurpleClaw@2024!}
+
+      # CORS — comma-separated list of allowed frontend origins
+      # Use * only in dev; set to your actual domain(s) in production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+
+      # Seed control — set to false to skip demo data (only admin user created)
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+
+      # ── Prometheus integration ──────────────────────────────────────────────
+      # Set PROMETHEUS_URL to your Prometheus instance.
+      # In a homelab: http://host.docker.internal:9090 (if on the same host)
+      # Or use the service name if Prometheus runs in the same Docker network.
+      # Add additional environments as PROMETHEUS_URL_<envname>=http://...
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-}
+      PROMETHEUS_ENV_ID: ${PROMETHEUS_ENV_ID:-default}
+      PROMETHEUS_TIMEOUT: ${PROMETHEUS_TIMEOUT:-3.0}
+
+      # ── Loki integration ────────────────────────────────────────────────────
+      # Set LOKI_URL to your Loki instance.
+      # In a homelab: http://host.docker.internal:3100
+      LOKI_URL: ${LOKI_URL:-}
+      LOKI_ENV_ID: ${LOKI_ENV_ID:-default}
+      LOKI_TIMEOUT: ${LOKI_TIMEOUT:-3.0}
+      # Expected log sources for gap detection (comma-separated)
+      LOKI_EXPECTED_SOURCES: ${LOKI_EXPECTED_SOURCES:-}
+
     ports:
-      - "8001:8001"
+      - "${BACKEND_PORT:-8001}:8001"
     volumes:
       - purpleclaw_data:/app/data
     restart: unless-stopped
     networks:
       - purpleclaw-net
+    # Allows the backend container to reach services on the Docker host
+    # (e.g. Prometheus/Loki running directly on the homelab host)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/v1/health"]
       interval: 30s
@@ -31,7 +68,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
     restart: unless-stopped
     networks:
       - purpleclaw-net

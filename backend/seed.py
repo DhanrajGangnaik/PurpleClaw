@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 import random
 from pc_auth import get_password_hash
@@ -6,21 +7,34 @@ from models import *
 
 def seed_database(db):
     now = datetime.utcnow()
+    seed_demo = os.getenv("SEED_DEMO_DATA", "true").lower() not in ("false", "0", "no")
 
     # ── Users ────────────────────────────────────────────────────────────────
+    admin_username = os.getenv("ADMIN_USERNAME", "admin")
+    admin_password = os.getenv("ADMIN_PASSWORD", "PurpleClaw@2024!")
+    admin_email = os.getenv("ADMIN_EMAIL", f"{admin_username}@purpleclaw.local")
+
     users_data = [
-        ("admin", "admin@purpleclaw.io", "PurpleClaw@2024!", "Admin User", UserRole.admin),
-        ("sarah.chen", "sarah.chen@purpleclaw.io", "Analyst@2024!", "Sarah Chen", UserRole.analyst),
-        ("marcus.red", "marcus.red@purpleclaw.io", "RedTeam@2024!", "Marcus Rodriguez", UserRole.red_team),
-        ("lisa.blue", "lisa.blue@purpleclaw.io", "BlueTeam@2024!", "Lisa Park", UserRole.blue_team),
-        ("john.viewer", "john.viewer@purpleclaw.io", "Viewer@2024!", "John Smith", UserRole.viewer),
-        ("devika.ops", "devika.ops@purpleclaw.io", "Ops@2024!", "Devika Sharma", UserRole.analyst),
+        (admin_username, admin_email, admin_password, "Administrator", UserRole.admin),
     ]
+    if seed_demo:
+        users_data += [
+            ("sarah.chen", "sarah.chen@purpleclaw.local", "Analyst@2024!", "Sarah Chen", UserRole.analyst),
+            ("marcus.red", "marcus.red@purpleclaw.local", "RedTeam@2024!", "Marcus Rodriguez", UserRole.red_team),
+            ("lisa.blue", "lisa.blue@purpleclaw.local", "BlueTeam@2024!", "Lisa Park", UserRole.blue_team),
+            ("john.viewer", "john.viewer@purpleclaw.local", "Viewer@2024!", "John Smith", UserRole.viewer),
+            ("devika.ops", "devika.ops@purpleclaw.local", "Ops@2024!", "Devika Sharma", UserRole.analyst),
+        ]
     users = []
     for uname, email, pwd, full, role in users_data:
         u = User(username=uname, email=email, hashed_password=get_password_hash(pwd),
                  full_name=full, role=role, is_active=True, last_login=now - timedelta(hours=random.randint(1,48)))
         db.add(u); db.flush(); users.append(u)
+
+    # When SEED_DEMO_DATA=false only the admin user is created; skip all demo data
+    if not seed_demo:
+        db.commit()
+        return
 
     # ── Assets ───────────────────────────────────────────────────────────────
     assets_data = [

@@ -53,7 +53,9 @@ def obj_to_dict(obj):
     return d
 
 app = FastAPI(title="PurpleClaw API", version="2.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] if _raw_origins else ["*"]
+app.add_middleware(CORSMiddleware, allow_origins=_allowed_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("startup")
 async def startup():
@@ -135,7 +137,42 @@ def dashboard_stats(db: Session = Depends(get_db), _: User = Depends(get_current
         timeline.append({"date": d.strftime("%Y-%m-%d"), "alerts": db.query(Alert).filter(Alert.created_at.between(start,end)).count(), "findings": db.query(Finding).filter(Finding.detected_at.between(start,end)).count(), "incidents": db.query(Incident).filter(Incident.created_at.between(start,end)).count()})
     recent_alerts = db.query(Alert).order_by(desc(Alert.created_at)).limit(10).all()
     recent_incidents = db.query(Incident).order_by(desc(Incident.created_at)).limit(5).all()
-    return {"total_assets": total_assets, "active_incidents": active_incidents, "open_alerts": open_alerts, "open_findings": open_findings, "critical_findings": critical_findings, "ioc_count": ioc_count, "threat_actors": threat_actors, "exercises_active": exercises_active, "compliance_score": compliance_score, "risk_score": risk_score, "alerts_by_severity": alerts_by_sev, "findings_by_severity": findings_by_sev, "incidents_by_status": incidents_by_status, "assets_by_type": assets_by_type, "timeline": timeline, "recent_alerts": [obj_to_dict(a) for a in recent_alerts], "recent_incidents": [obj_to_dict(i) for i in recent_incidents]}
+    covered_cov = db.query(ATTACKCoverage).filter(ATTACKCoverage.covered==True).count()
+    total_cov = db.query(ATTACKCoverage).count()
+    mitre_coverage = round((covered_cov/total_cov*100) if total_cov else 0, 1)
+    high_findings = db.query(Finding).filter(Finding.severity==Severity.high, Finding.status!=FindingStatus.resolved).count()
+    medium_findings = db.query(Finding).filter(Finding.severity==Severity.medium, Finding.status!=FindingStatus.resolved).count()
+    low_findings = db.query(Finding).filter(Finding.severity==Severity.low, Finding.status!=FindingStatus.resolved).count()
+    return {"total_assets": total_assets, "active_incidents": active_incidents, "open_alerts": open_alerts, "open_findings": open_findings, "critical_findings": critical_findings, "high_findings": high_findings, "medium_findings": medium_findings, "low_findings": low_findings, "ioc_count": ioc_count, "active_iocs": ioc_count, "threat_actors": threat_actors, "exercises_active": exercises_active, "compliance_score": compliance_score, "risk_score": risk_score, "mitre_coverage": mitre_coverage, "alerts_by_severity": alerts_by_sev, "findings_by_severity": findings_by_sev, "incidents_by_status": incidents_by_status, "assets_by_type": assets_by_type, "timeline": timeline, "recent_alerts": [obj_to_dict(a) for a in recent_alerts], "recent_incidents": [obj_to_dict(i) for i in recent_incidents]}
+
+@app.get("/api/v1/dashboard/alerts-trend")
+def alerts_trend(days:int=7, db:Session=Depends(get_db), _:User=Depends(get_current_user)):
+    now = datetime.utcnow()
+    result = []
+    for i in range(days):
+        d = now - timedelta(days=days-1-i)
+        start = d.replace(hour=0,minute=0,second=0,microsecond=0)
+        end = d.replace(hour=23,minute=59,second=59,microsecond=999999)
+        count = db.query(Alert).filter(Alert.created_at.between(start,end)).count()
+        result.append({"date": d.strftime("%Y-%m-%d"), "count": count})
+    return result
+
+@app.get("/api/v1/dashboard/top-threats")
+def top_threats(limit:int=8, db:Session=Depends(get_db), _:User=Depends(get_current_user)):
+    actors = db.query(ThreatActor).filter(ThreatActor.active==True).order_by(desc(ThreatActor.last_seen)).limit(limit).all()
+    return [obj_to_dict(a) for a in actors]
+
+@app.get("/api/v1/dashboard/asset-risk")
+def asset_risk(limit:int=10, db:Session=Depends(get_db), _:User=Depends(get_current_user)):
+    assets = db.query(Asset).order_by(desc(Asset.risk_score)).limit(limit).all()
+    return [{"name": a.name, "risk_score": a.risk_score, "criticality": a.criticality.value if a.criticality else None, "type": a.type.value if a.type else None} for a in assets]
+
+@app.get("/api/v1/dashboard/mitre-coverage")
+def mitre_coverage_summary(db:Session=Depends(get_db), _:User=Depends(get_current_user)):
+    covered = db.query(ATTACKCoverage).filter(ATTACKCoverage.covered==True).count()
+    partial = db.query(ATTACKCoverage).filter(ATTACKCoverage.covered==False).count()
+    total = db.query(ATTACKCoverage).count()
+    return {"covered": covered, "partial": partial, "not_covered": max(0, total - covered - partial), "total": total, "coverage_percent": round((covered/total*100) if total else 0, 1)}
 
 @app.get("/api/v1/dashboard/posture")
 def posture(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -1118,6 +1155,18 @@ def get_settings(db:Session=Depends(get_db),_:User=Depends(get_current_user)):
         by_cat[s.category].append(obj_to_dict(s))
     return by_cat
 
+# /settings/system — flat list for frontend SystemSettings page
+@app.get("/api/v1/settings/system")
+def get_settings_flat(db:Session=Depends(get_db),_:User=Depends(get_current_user)):
+    return [obj_to_dict(s) for s in db.query(SystemSetting).order_by(SystemSetting.key).all()]
+
+@app.put("/api/v1/settings/system")
+def update_setting_by_body(data:dict=Body(...),db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
+    if current_user.role!=UserRole.admin: raise HTTPException(403,"Admin required")
+    key=data.get("key"); s=db.query(SystemSetting).filter(SystemSetting.key==key).first()
+    if not s: raise HTTPException(404,"Setting not found")
+    s.value=data.get("value"); db.commit(); return obj_to_dict(s)
+
 @app.put("/api/v1/settings/{key}")
 def update_setting(key:str,data:dict=Body(...),db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
     if current_user.role!=UserRole.admin: raise HTTPException(403,"Admin required")
@@ -1125,13 +1174,56 @@ def update_setting(key:str,data:dict=Body(...),db:Session=Depends(get_db),curren
     if not s: raise HTTPException(404,"Setting not found")
     s.value=data.get("value"); db.commit(); return obj_to_dict(s)
 
+# Route aliases for frontend settings pages
+@app.get("/api/v1/settings/users")
+def settings_list_users(page:int=1,size:int=20,search:Optional[str]=None,db:Session=Depends(get_db),_:User=Depends(get_current_user)):
+    q=db.query(User)
+    if search: q=q.filter(or_(User.username.ilike(f"%{search}%"),User.full_name.ilike(f"%{search}%"),User.email.ilike(f"%{search}%")))
+    return paginate(q.order_by(User.id),page,size)
+
+@app.post("/api/v1/settings/users")
+def settings_create_user(data:dict=Body(...),db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
+    if current_user.role!=UserRole.admin: raise HTTPException(403,"Admin required")
+    if db.query(User).filter(User.username==data["username"]).first(): raise HTTPException(400,"Username exists")
+    u=User(username=data["username"],email=data["email"],hashed_password=get_password_hash(data["password"]),full_name=data.get("full_name"),role=UserRole(data.get("role","viewer")))
+    db.add(u); db.commit(); db.refresh(u); return obj_to_dict(u)
+
+@app.put("/api/v1/settings/users/{user_id}")
+def settings_update_user(user_id:int,data:dict=Body(...),db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
+    if current_user.role!=UserRole.admin and current_user.id!=user_id: raise HTTPException(403,"Forbidden")
+    u=db.query(User).filter(User.id==user_id).first()
+    if not u: raise HTTPException(404,"Not found")
+    for k,v in data.items():
+        if k=="role" and current_user.role==UserRole.admin: u.role=UserRole(v)
+        elif k in ("full_name","email","is_active") and hasattr(u,k): setattr(u,k,v)
+    db.commit(); return obj_to_dict(u)
+
+@app.delete("/api/v1/settings/users/{user_id}")
+def settings_delete_user(user_id:int,db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
+    if current_user.role!=UserRole.admin: raise HTTPException(403,"Admin required")
+    u=db.query(User).filter(User.id==user_id).first()
+    if not u: raise HTTPException(404,"Not found")
+    db.delete(u); db.commit(); return {"message":"User deleted"}
+
+@app.get("/api/v1/settings/audit-logs")
+def settings_audit_logs(page:int=1,size:int=50,action:Optional[str]=None,resource_type:Optional[str]=None,user_id:Optional[int]=None,db:Session=Depends(get_db),_:User=Depends(get_current_user)):
+    q=db.query(AuditLog)
+    if action: q=q.filter(AuditLog.action.ilike(f"%{action}%"))
+    if resource_type: q=q.filter(AuditLog.resource_type==resource_type)
+    if user_id: q=q.filter(AuditLog.user_id==user_id)
+    return paginate(q.order_by(desc(AuditLog.timestamp)),page,size)
+
 # Platform
 @app.get("/api/v1/platform/health")
 def platform_health(db:Session=Depends(get_db)):
     try:
         db.query(User).count(); db_ok=True
     except: db_ok=False
-    return {"status":"healthy" if db_ok else "degraded","version":"2.0.0","database":"ok" if db_ok else "error","timestamp":datetime.utcnow().isoformat(),"uptime_seconds":86400,"stats":{"users":db.query(User).count() if db_ok else 0,"assets":db.query(Asset).count() if db_ok else 0,"alerts":db.query(Alert).count() if db_ok else 0}}
+    from collectors.prometheus import get_prometheus_health, PROMETHEUS_CONFIGS
+    from collectors.loki import get_loki_health, LOKI_CONFIGS
+    prom_health = get_prometheus_health() if PROMETHEUS_CONFIGS else {"status": "not-configured", "healthy": False}
+    loki_health = get_loki_health() if LOKI_CONFIGS else {"status": "not-configured", "healthy": False}
+    return {"status":"healthy" if db_ok else "degraded","version":"2.0.0","database":"ok" if db_ok else "error","timestamp":datetime.utcnow().isoformat(),"prometheus":prom_health,"loki":loki_health,"stats":{"users":db.query(User).count() if db_ok else 0,"assets":db.query(Asset).count() if db_ok else 0,"alerts":db.query(Alert).count() if db_ok else 0}}
 
 if __name__=="__main__":
     import uvicorn

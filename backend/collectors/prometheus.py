@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -18,39 +19,64 @@ class PrometheusSourceConfig:
     timeout_seconds: float
 
 
-PROMETHEUS_CONFIGS: dict[str, PrometheusSourceConfig] = {
-    "homelab": PrometheusSourceConfig(
-        environment_id="homelab",
-        base_url="http://127.0.0.1:9090",
-        enabled=True,
-        timeout_seconds=1.5,
-    ),
-    "lab": PrometheusSourceConfig(
-        environment_id="lab",
-        base_url="http://127.0.0.1:9091",
-        enabled=True,
-        timeout_seconds=1.5,
-    ),
-    "staging": PrometheusSourceConfig(
-        environment_id="staging",
-        base_url="http://127.0.0.1:9092",
-        enabled=False,
-        timeout_seconds=1.5,
-    ),
+def _build_configs() -> dict[str, PrometheusSourceConfig]:
+    """Build configs from environment variables at startup."""
+    configs: dict[str, PrometheusSourceConfig] = {}
+    timeout = float(os.getenv("PROMETHEUS_TIMEOUT", "3.0"))
+
+    # Primary: PROMETHEUS_URL (environment id from PROMETHEUS_ENV_ID, default "default")
+    primary_url = os.getenv("PROMETHEUS_URL", "").strip()
+    if primary_url:
+        env_id = os.getenv("PROMETHEUS_ENV_ID", "default")
+        configs[env_id] = PrometheusSourceConfig(
+            environment_id=env_id,
+            base_url=primary_url.rstrip("/"),
+            enabled=True,
+            timeout_seconds=timeout,
+        )
+
+    # Additional environments: PROMETHEUS_URL_<ENV_ID>=url
+    # e.g. PROMETHEUS_URL_STAGING=http://staging-prom:9090
+    for key, val in os.environ.items():
+        if key.startswith("PROMETHEUS_URL_") and val.strip():
+            env_id = key[len("PROMETHEUS_URL_"):].lower()
+            if env_id:
+                configs[env_id] = PrometheusSourceConfig(
+                    environment_id=env_id,
+                    base_url=val.strip().rstrip("/"),
+                    enabled=True,
+                    timeout_seconds=timeout,
+                )
+
+    return configs
+
+
+PROMETHEUS_CONFIGS: dict[str, PrometheusSourceConfig] = _build_configs()
+PRIMARY_ENVIRONMENT_ID = os.getenv("PROMETHEUS_ENV_ID", next(iter(PROMETHEUS_CONFIGS), "default"))
+
+_NOT_CONFIGURED = {
+    "environment_id": "default",
+    "enabled": False,
+    "status": "not-configured",
+    "healthy": False,
+    "message": "Prometheus URL not configured. Set PROMETHEUS_URL environment variable.",
 }
-PRIMARY_ENVIRONMENT_ID = "homelab"
 
 
 def get_prometheus_config(environment_id: str | None = None) -> dict[str, object]:
     """Return read-only Prometheus configuration for an environment."""
-
-    return asdict(_config_for(environment_id))
+    config = _config_for(environment_id)
+    if config is None:
+        return {**_NOT_CONFIGURED, "base_url": "", "timeout_seconds": 3.0}
+    return asdict(config)
 
 
 def get_prometheus_health(environment_id: str | None = None) -> dict[str, object]:
     """Check whether the configured Prometheus API is reachable."""
-
     config = _config_for(environment_id)
+    if config is None:
+        return _NOT_CONFIGURED.copy()
+
     if not config.enabled:
         return {
             "environment_id": config.environment_id,
@@ -72,8 +98,10 @@ def get_prometheus_health(environment_id: str | None = None) -> dict[str, object
 
 def get_target_summary(environment_id: str | None = None) -> dict[str, object]:
     """Return active scrape target counts and node exporter coverage."""
-
     config = _config_for(environment_id)
+    if config is None:
+        return _empty_target_summary("default", "not-configured")
+
     if not config.enabled:
         return _empty_target_summary(config.environment_id, "disabled")
 
@@ -85,10 +113,10 @@ def get_target_summary(environment_id: str | None = None) -> dict[str, object]:
 
     targets = response["data"].get("data", {}).get("activeTargets", [])
     active_targets = targets if isinstance(targets, list) else []
-    up_targets = [target for target in active_targets if target.get("health") == "up"]
-    down_targets = [target for target in active_targets if target.get("health") != "up"]
-    node_targets = [target for target in active_targets if _is_node_exporter_target(target)]
-    node_targets_up = [target for target in node_targets if target.get("health") == "up"]
+    up_targets = [t for t in active_targets if t.get("health") == "up"]
+    down_targets = [t for t in active_targets if t.get("health") != "up"]
+    node_targets = [t for t in active_targets if _is_node_exporter_target(t)]
+    node_targets_up = [t for t in node_targets if t.get("health") == "up"]
 
     return {
         "environment_id": config.environment_id,
@@ -98,20 +126,22 @@ def get_target_summary(environment_id: str | None = None) -> dict[str, object]:
         "down_target_count": len(down_targets),
         "node_exporter_present": bool(node_targets),
         "node_exporter_up_count": len(node_targets_up),
-        "down_targets": [_target_label(target) for target in down_targets[:10]],
+        "down_targets": [_target_label(t) for t in down_targets[:10]],
         "message": "Prometheus scrape targets loaded.",
     }
 
 
 def get_node_summary(environment_id: str | None = None) -> dict[str, object]:
     """Return basic node exporter host metric rollups when available."""
-
     config = _config_for(environment_id)
     target_summary = get_target_summary(environment_id)
+
+    if config is None:
+        return _empty_node_summary("default", "not-configured", target_summary)
     if not config.enabled:
         return _empty_node_summary(config.environment_id, "disabled", target_summary)
-    if target_summary["status"] == "unavailable":
-        return _empty_node_summary(config.environment_id, "unavailable", target_summary)
+    if target_summary.get("status") in ("unavailable", "not-configured"):
+        return _empty_node_summary(config.environment_id, str(target_summary.get("status")), target_summary)
 
     cpu = _query_scalar(config, '100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)')
     memory = _query_scalar(config, '(1 - (sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))) * 100')
@@ -120,9 +150,9 @@ def get_node_summary(environment_id: str | None = None) -> dict[str, object]:
 
     return {
         "environment_id": config.environment_id,
-        "status": "healthy" if target_summary["node_exporter_present"] else "missing",
-        "node_exporter_present": target_summary["node_exporter_present"],
-        "node_exporter_up_count": target_summary["node_exporter_up_count"],
+        "status": "healthy" if target_summary.get("node_exporter_present") else "missing",
+        "node_exporter_present": target_summary.get("node_exporter_present"),
+        "node_exporter_up_count": target_summary.get("node_exporter_up_count"),
         "cpu_pressure_percent": cpu,
         "memory_pressure_percent": memory,
         "disk_pressure_percent": disk,
@@ -132,7 +162,6 @@ def get_node_summary(environment_id: str | None = None) -> dict[str, object]:
 
 def get_environment_metrics(environment_id: str | None = None) -> dict[str, object]:
     """Return a safe read-only Prometheus rollup for one environment."""
-
     config = get_prometheus_config(environment_id)
     health = get_prometheus_health(environment_id)
     target_summary = get_target_summary(environment_id)
@@ -146,10 +175,19 @@ def get_environment_metrics(environment_id: str | None = None) -> dict[str, obje
     }
 
 
-def _config_for(environment_id: str | None) -> PrometheusSourceConfig:
-    if environment_id in PROMETHEUS_CONFIGS:
+def get_all_environments() -> list[str]:
+    """Return all configured environment IDs."""
+    return list(PROMETHEUS_CONFIGS.keys())
+
+
+def _config_for(environment_id: str | None) -> PrometheusSourceConfig | None:
+    if not PROMETHEUS_CONFIGS:
+        return None
+    if environment_id and environment_id in PROMETHEUS_CONFIGS:
         return PROMETHEUS_CONFIGS[str(environment_id)]
-    return PROMETHEUS_CONFIGS[PRIMARY_ENVIRONMENT_ID]
+    if PRIMARY_ENVIRONMENT_ID in PROMETHEUS_CONFIGS:
+        return PROMETHEUS_CONFIGS[PRIMARY_ENVIRONMENT_ID]
+    return next(iter(PROMETHEUS_CONFIGS.values()))
 
 
 def _request_json(config: PrometheusSourceConfig, path: str, params: dict[str, str]) -> dict[str, Any]:
@@ -162,7 +200,11 @@ def _request_json(config: PrometheusSourceConfig, path: str, params: dict[str, s
     except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
         return {"ok": False, "error": str(exc), "data": {}}
 
-    return {"ok": payload.get("status") == "success", "error": "" if payload.get("status") == "success" else str(payload), "data": payload}
+    return {
+        "ok": payload.get("status") == "success",
+        "error": "" if payload.get("status") == "success" else str(payload),
+        "data": payload,
+    }
 
 
 def _query_scalar(config: PrometheusSourceConfig, query: str) -> float | None:
@@ -186,7 +228,7 @@ def _query_scalar(config: PrometheusSourceConfig, query: str) -> float | None:
 def _is_node_exporter_target(target: dict[str, Any]) -> bool:
     labels = target.get("labels", {})
     discovered = target.get("discoveredLabels", {})
-    values = " ".join(str(value).lower() for value in [*labels.values(), *discovered.values()])
+    values = " ".join(str(v).lower() for v in [*labels.values(), *discovered.values()])
     return "node" in values or "9100" in values
 
 

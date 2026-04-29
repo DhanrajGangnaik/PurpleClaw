@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -20,47 +21,76 @@ class LokiSourceConfig:
     timeout_seconds: float
 
 
-LOKI_CONFIGS: dict[str, LokiSourceConfig] = {
-    "homelab": LokiSourceConfig(
-        environment_id="homelab",
-        base_url="http://127.0.0.1:3100",
-        enabled=True,
-        timeout_seconds=1.5,
-    ),
-    "lab": LokiSourceConfig(
-        environment_id="lab",
-        base_url="http://127.0.0.1:3101",
-        enabled=True,
-        timeout_seconds=1.5,
-    ),
-    "staging": LokiSourceConfig(
-        environment_id="staging",
-        base_url="http://127.0.0.1:3102",
-        enabled=False,
-        timeout_seconds=1.5,
-    ),
-}
-PRIMARY_ENVIRONMENT_ID = "homelab"
-QUERY_LIMIT = "250"
+def _build_configs() -> dict[str, LokiSourceConfig]:
+    """Build configs from environment variables at startup."""
+    configs: dict[str, LokiSourceConfig] = {}
+    timeout = float(os.getenv("LOKI_TIMEOUT", "3.0"))
+
+    # Primary: LOKI_URL (environment id from LOKI_ENV_ID, default "default")
+    primary_url = os.getenv("LOKI_URL", "").strip()
+    if primary_url:
+        env_id = os.getenv("LOKI_ENV_ID", "default")
+        configs[env_id] = LokiSourceConfig(
+            environment_id=env_id,
+            base_url=primary_url.rstrip("/"),
+            enabled=True,
+            timeout_seconds=timeout,
+        )
+
+    # Additional environments: LOKI_URL_<ENV_ID>=url
+    # e.g. LOKI_URL_STAGING=http://staging-loki:3100
+    for key, val in os.environ.items():
+        if key.startswith("LOKI_URL_") and val.strip():
+            env_id = key[len("LOKI_URL_"):].lower()
+            if env_id:
+                configs[env_id] = LokiSourceConfig(
+                    environment_id=env_id,
+                    base_url=val.strip().rstrip("/"),
+                    enabled=True,
+                    timeout_seconds=timeout,
+                )
+
+    return configs
+
+
+LOKI_CONFIGS: dict[str, LokiSourceConfig] = _build_configs()
+PRIMARY_ENVIRONMENT_ID = os.getenv("LOKI_ENV_ID", next(iter(LOKI_CONFIGS), "default"))
+QUERY_LIMIT = os.getenv("LOKI_QUERY_LIMIT", "250")
 SIX_HOURS_SECONDS = 6 * 60 * 60
 RECENT_SECONDS = 15 * 60
-EXPECTED_LOG_SOURCES: dict[str, list[str]] = {
-    "homelab": ["auth", "audit", "syslog"],
-    "lab": ["audit", "kubernetes", "container-runtime"],
-    "staging": ["application", "auth", "container-runtime"],
+
+# Expected log sources per environment (configurable via LOKI_EXPECTED_SOURCES_<ENV>=src1,src2)
+def _expected_sources(env_id: str) -> list[str]:
+    env_key = f"LOKI_EXPECTED_SOURCES_{env_id.upper()}"
+    raw = os.getenv(env_key, os.getenv("LOKI_EXPECTED_SOURCES", "")).strip()
+    if raw:
+        return [s.strip() for s in raw.split(",") if s.strip()]
+    return []
+
+
+_NOT_CONFIGURED = {
+    "environment_id": "default",
+    "enabled": False,
+    "status": "not-configured",
+    "healthy": False,
+    "message": "Loki URL not configured. Set LOKI_URL environment variable.",
 }
 
 
 def get_loki_config(environment_id: str | None = None) -> dict[str, object]:
     """Return read-only Loki configuration for an environment."""
-
-    return asdict(_config_for(environment_id))
+    config = _config_for(environment_id)
+    if config is None:
+        return {**_NOT_CONFIGURED, "base_url": "", "timeout_seconds": 3.0}
+    return asdict(config)
 
 
 def get_loki_health(environment_id: str | None = None) -> dict[str, object]:
     """Check whether the configured Loki API is reachable."""
-
     config = _config_for(environment_id)
+    if config is None:
+        return _NOT_CONFIGURED.copy()
+
     if not config.enabled:
         return {
             "environment_id": config.environment_id,
@@ -81,10 +111,12 @@ def get_loki_health(environment_id: str | None = None) -> dict[str, object]:
 
 
 def get_log_source_summary(environment_id: str | None = None) -> dict[str, object]:
-    """Return log source coverage using fixed read-only Loki API queries."""
-
+    """Return log source coverage using Loki API queries."""
     config = _config_for(environment_id)
-    expected_sources = EXPECTED_LOG_SOURCES.get(config.environment_id, [])
+    if config is None:
+        return _empty_log_source_summary("default", "not-configured", [])
+
+    expected_sources = _expected_sources(config.environment_id)
     if not config.enabled:
         return _empty_log_source_summary(config.environment_id, "disabled", expected_sources)
 
@@ -99,8 +131,8 @@ def get_log_source_summary(environment_id: str | None = None) -> dict[str, objec
     recent_sources = _source_counts(recent_response["data"] if recent_response["ok"] else {})
     active_sources = sorted(historical_sources)
     recent_source_names = set(recent_sources)
-    missing_sources = [source for source in expected_sources if not _source_present(source, active_sources)]
-    stale_sources = [source for source in active_sources if source not in recent_source_names]
+    missing_sources = [src for src in expected_sources if not _source_present(src, active_sources)]
+    stale_sources = [src for src in active_sources if src not in recent_source_names]
     event_count = sum(historical_sources.values())
     newest_log_at = _newest_log_at(historical_response["data"])
 
@@ -128,13 +160,19 @@ def get_log_source_summary(environment_id: str | None = None) -> dict[str, objec
 
 
 def get_auth_failure_summary(environment_id: str | None = None) -> dict[str, object]:
-    """Return authentication failure signals from fixed Loki queries."""
-
+    """Return authentication failure signals from Loki queries."""
     config = _config_for(environment_id)
+    if config is None:
+        return _empty_signal_summary("default", "not-configured")
+
     if not config.enabled:
         return _empty_signal_summary(config.environment_id, "disabled")
 
-    response = _query_logs(config, '{job=~".+"} |~ "(?i)(authentication failed|auth failure|failed password|invalid login|login failed)"', SIX_HOURS_SECONDS)
+    response = _query_logs(
+        config,
+        '{job=~".+"} |~ "(?i)(authentication failed|auth failure|failed password|invalid login|login failed)"',
+        SIX_HOURS_SECONDS,
+    )
     if not response["ok"]:
         summary = _empty_signal_summary(config.environment_id, "unavailable")
         summary["message"] = response["error"]
@@ -153,13 +191,19 @@ def get_auth_failure_summary(environment_id: str | None = None) -> dict[str, obj
 
 
 def get_service_error_summary(environment_id: str | None = None) -> dict[str, object]:
-    """Return service error signals from fixed Loki queries."""
-
+    """Return service error signals from Loki queries."""
     config = _config_for(environment_id)
+    if config is None:
+        return _empty_signal_summary("default", "not-configured")
+
     if not config.enabled:
         return _empty_signal_summary(config.environment_id, "disabled")
 
-    response = _query_logs(config, '{job=~".+"} |~ "(?i)(error|exception|panic|5[0-9]{2})"', SIX_HOURS_SECONDS)
+    response = _query_logs(
+        config,
+        '{job=~".+"} |~ "(?i)(error|exception|panic|5[0-9]{2})"',
+        SIX_HOURS_SECONDS,
+    )
     if not response["ok"]:
         summary = _empty_signal_summary(config.environment_id, "unavailable")
         summary["message"] = response["error"]
@@ -179,7 +223,6 @@ def get_service_error_summary(environment_id: str | None = None) -> dict[str, ob
 
 def get_environment_log_metrics(environment_id: str | None = None) -> dict[str, object]:
     """Return a safe read-only Loki rollup for one environment."""
-
     config = get_loki_config(environment_id)
     health = get_loki_health(environment_id)
     log_source_summary = get_log_source_summary(environment_id)
@@ -195,10 +238,19 @@ def get_environment_log_metrics(environment_id: str | None = None) -> dict[str, 
     }
 
 
-def _config_for(environment_id: str | None) -> LokiSourceConfig:
-    if environment_id in LOKI_CONFIGS:
+def get_all_environments() -> list[str]:
+    """Return all configured environment IDs."""
+    return list(LOKI_CONFIGS.keys())
+
+
+def _config_for(environment_id: str | None) -> LokiSourceConfig | None:
+    if not LOKI_CONFIGS:
+        return None
+    if environment_id and environment_id in LOKI_CONFIGS:
         return LOKI_CONFIGS[str(environment_id)]
-    return LOKI_CONFIGS[PRIMARY_ENVIRONMENT_ID]
+    if PRIMARY_ENVIRONMENT_ID in LOKI_CONFIGS:
+        return LOKI_CONFIGS[PRIMARY_ENVIRONMENT_ID]
+    return next(iter(LOKI_CONFIGS.values()))
 
 
 def _request_json(config: LokiSourceConfig, path: str, params: dict[str, str]) -> dict[str, Any]:
@@ -211,7 +263,11 @@ def _request_json(config: LokiSourceConfig, path: str, params: dict[str, str]) -
     except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
         return {"ok": False, "error": str(exc), "data": {}}
 
-    return {"ok": payload.get("status") == "success", "error": "" if payload.get("status") == "success" else str(payload), "data": payload}
+    return {
+        "ok": payload.get("status") == "success",
+        "error": "" if payload.get("status") == "success" else str(payload),
+        "data": payload,
+    }
 
 
 def _query_logs(config: LokiSourceConfig, query: str, seconds: int) -> dict[str, Any]:
@@ -292,7 +348,7 @@ def _empty_log_source_summary(environment_id: str, status: str, expected_sources
         "source_count": 0,
         "active_sources": [],
         "expected_sources": expected_sources,
-        "missing_sources": expected_sources if status != "disabled" else [],
+        "missing_sources": expected_sources if status not in ("disabled", "not-configured") else [],
         "stale_sources": [],
         "event_count": 0,
         "newest_log_at": None,
