@@ -41,6 +41,43 @@ services:
       # Expected log sources for gap detection (comma-separated)
       LOKI_EXPECTED_SOURCES: ${LOKI_EXPECTED_SOURCES:-}
 
+      # ── Autonomous engine ──────────────────────────────────────────────────
+      DISCOVERY_INTERVAL: ${DISCOVERY_INTERVAL:-900}
+      THREAT_INTERVAL: ${THREAT_INTERVAL:-300}
+      AUTO_RESPONSE: ${AUTO_RESPONSE:-false}
+      AUTO_RESPONSE_LEVEL: ${AUTO_RESPONSE_LEVEL:-safe}
+
+      # ── Network scanner (zero-config discovery) ────────────────────────────
+      # Scans the container's /24 subnet + host.docker.internal by default.
+      # Set to false to rely only on explicitly configured service URLs.
+      SCAN_NETWORK: ${SCAN_NETWORK:-true}
+      # Additional CIDR ranges to scan (comma-separated, e.g. 192.168.10.0/24)
+      SCAN_RANGES: ${SCAN_RANGES:-}
+      # CIDR ranges to exclude from scanning (comma-separated)
+      SCAN_EXCLUDE: ${SCAN_EXCLUDE:-}
+      # TCP connect timeout per port (seconds)
+      SCAN_TIMEOUT: ${SCAN_TIMEOUT:-0.5}
+      # HTTP fingerprint probe timeout (seconds)
+      SCAN_FP_TIMEOUT: ${SCAN_FP_TIMEOUT:-3.0}
+      # Parallel TCP scan workers
+      SCAN_CONCURRENCY: ${SCAN_CONCURRENCY:-100}
+
+      # ── Kubernetes integration ──────────────────────────────────────────────
+      KUBERNETES_URL: ${KUBERNETES_URL:-}
+      KUBERNETES_TOKEN: ${KUBERNETES_TOKEN:-}
+      KUBERNETES_VERIFY_SSL: ${KUBERNETES_VERIFY_SSL:-true}
+
+      # ── Grafana integration ─────────────────────────────────────────────────
+      GRAFANA_URL: ${GRAFANA_URL:-}
+      GRAFANA_API_KEY: ${GRAFANA_API_KEY:-}
+
+      # ── Ollama integration ──────────────────────────────────────────────────
+      OLLAMA_URL: ${OLLAMA_URL:-}
+
+      # ── MLflow integration ──────────────────────────────────────────────────
+      MLFLOW_URL: ${MLFLOW_URL:-}
+      MLFLOW_TOKEN: ${MLFLOW_TOKEN:-}
+
     ports:
       - "${BACKEND_PORT:-8001}:8001"
     volumes:

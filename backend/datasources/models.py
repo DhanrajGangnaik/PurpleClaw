@@ -12,7 +12,7 @@ class DataSource(BaseModel):
     datasource_id: str = Field(..., min_length=1)
     environment_id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
-    type: Literal["prometheus", "loki", "file", "api", "inventory", "scanner_results"]
+    type: Literal["prometheus", "loki", "file", "api", "inventory", "scanner_results", "kubernetes", "grafana", "ollama", "mlflow"]
     status: Literal["enabled", "disabled", "error"] = "enabled"
     config: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
@@ -25,7 +25,7 @@ class DataSource(BaseModel):
 class DataSourceCreate(BaseModel):
     environment_id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
-    type: Literal["prometheus", "loki", "file", "api", "inventory", "scanner_results"]
+    type: Literal["prometheus", "loki", "file", "api", "inventory", "scanner_results", "kubernetes", "grafana", "ollama", "mlflow"]
     status: Literal["enabled", "disabled", "error"] = "enabled"
     config: dict[str, Any] = Field(default_factory=dict)
     ingestion_enabled: bool = False
@@ -40,7 +40,7 @@ class DataSourceScheduleRequest(BaseModel):
 
 class DataSourceTestRequest(BaseModel):
     environment_id: str = Field(..., min_length=1)
-    type: Literal["prometheus", "loki", "file", "api", "inventory", "scanner_results"]
+    type: Literal["prometheus", "loki", "file", "api", "inventory", "scanner_results", "kubernetes", "grafana", "ollama", "mlflow"]
     config: dict[str, Any] = Field(default_factory=dict)
 
 

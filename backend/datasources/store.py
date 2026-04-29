@@ -130,6 +130,18 @@ def update_datasource_ingestion(datasource_id: str, enabled: bool, interval_seco
     return updated
 
 
+def delete_datasource(datasource_id: str) -> bool:
+    if datasource_id not in _DATASOURCES:
+        return False
+    del _DATASOURCES[datasource_id]
+    if db.enabled:
+        try:
+            db.delete_record("datasources", datasource_id)
+        except Exception:
+            pass
+    return True
+
+
 def ingest_environment_datasources(environment_id: str) -> dict[str, int]:
     ingested: dict[str, int] = {}
     for datasource in list_datasources_by_environment(environment_id):

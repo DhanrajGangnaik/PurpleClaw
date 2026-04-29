@@ -14,7 +14,7 @@ from datasources.store import get_datasource, update_datasource_ingestion
 from scheduler import scheduler
 
 
-_APPROVED_INGESTION_TYPES = {"prometheus", "loki", "api", "file", "inventory", "scanner_results"}
+_APPROVED_INGESTION_TYPES = {"prometheus", "loki", "api", "file", "inventory", "scanner_results", "kubernetes", "grafana", "ollama", "mlflow"}
 
 
 def schedule_datasource_ingestion(datasource_id: str, trigger_mode: str, interval_seconds: int | None, enabled: bool) -> DatasourceIngestionJob:

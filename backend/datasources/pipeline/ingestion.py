@@ -6,8 +6,12 @@ from core.registry import get_datasource, register_datasource
 from datasources.models import DataSource
 from datasources.pipeline.connectors.api_connector import APIConnector
 from datasources.pipeline.connectors.file_connector import FileConnector
+from datasources.pipeline.connectors.grafana_connector import GrafanaConnector
 from datasources.pipeline.connectors.inventory_connector import InventoryConnector
+from datasources.pipeline.connectors.kubernetes_connector import KubernetesConnector
 from datasources.pipeline.connectors.loki_connector import LokiConnector
+from datasources.pipeline.connectors.mlflow_connector import MLflowConnector
+from datasources.pipeline.connectors.ollama_connector import OllamaConnector
 from datasources.pipeline.connectors.prometheus_connector import PrometheusConnector
 from datasources.pipeline.connectors.scanner_results_connector import ScannerResultsConnector
 from datasources.pipeline.models import DataRecord
@@ -23,6 +27,10 @@ def initialize_pipeline() -> None:
     register_datasource("file", FileConnector)
     register_datasource("inventory", InventoryConnector)
     register_datasource("scanner_results", ScannerResultsConnector)
+    register_datasource("kubernetes", KubernetesConnector)
+    register_datasource("grafana", GrafanaConnector)
+    register_datasource("ollama", OllamaConnector)
+    register_datasource("mlflow", MLflowConnector)
 
 
 def ingest_datasource(datasource: DataSource) -> list[DataRecord]:

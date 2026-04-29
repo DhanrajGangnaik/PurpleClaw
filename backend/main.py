@@ -61,6 +61,49 @@ app.add_middleware(CORSMiddleware, allow_origins=_allowed_origins, allow_credent
 async def startup():
     os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
+
+    # Initialize the telemetry/datasource pipeline
+    try:
+        from persistence.store import initialize_persistence
+        from datasources.pipeline.ingestion import initialize_pipeline
+        from datasources.store import initialize_datasources
+        from datasources.jobs.bootstrap import initialize_ingestion_runtime
+        from datasources.autobootstrap import autobootstrap_from_env
+        from scheduler import scheduler
+        initialize_persistence()
+        initialize_pipeline()
+        initialize_datasources()
+        initialize_ingestion_runtime()
+        scheduler.start()
+        autobootstrap_from_env()
+        logger.info("Telemetry pipeline initialized")
+    except Exception as e:
+        logger.warning(f"Pipeline init warning (non-fatal): {e}")
+
+    # Start autonomous discovery + threat detection engines
+    try:
+        from discovery.engine import DiscoveryEngine
+        from threats.engine import ThreatEngine
+        from scheduler import scheduler as _sched
+
+        _disc = DiscoveryEngine(SessionLocal)
+        _threat = ThreatEngine(SessionLocal)
+
+        discovery_interval = int(os.getenv("DISCOVERY_INTERVAL", "900"))   # 15 min
+        threat_interval = int(os.getenv("THREAT_INTERVAL", "300"))         # 5 min
+
+        _sched.register_interval_job("auto-discovery", discovery_interval, _disc.run)
+        _sched.register_interval_job("threat-detection", threat_interval, _threat.run)
+
+        # Fire both immediately on startup (non-blocking via thread)
+        import threading
+        threading.Thread(target=_disc.run, daemon=True, name="discovery-init").start()
+        threading.Thread(target=_threat.run, daemon=True, name="threat-init").start()
+
+        logger.info("Auto-discovery (every %ds) and threat detection (every %ds) started", discovery_interval, threat_interval)
+    except Exception as e:
+        logger.warning(f"Autonomous engine init warning (non-fatal): {e}")
+
     db = SessionLocal()
     try:
         if db.query(User).count() == 0:
@@ -1224,6 +1267,158 @@ def platform_health(db:Session=Depends(get_db)):
     prom_health = get_prometheus_health() if PROMETHEUS_CONFIGS else {"status": "not-configured", "healthy": False}
     loki_health = get_loki_health() if LOKI_CONFIGS else {"status": "not-configured", "healthy": False}
     return {"status":"healthy" if db_ok else "degraded","version":"2.0.0","database":"ok" if db_ok else "error","timestamp":datetime.utcnow().isoformat(),"prometheus":prom_health,"loki":loki_health,"stats":{"users":db.query(User).count() if db_ok else 0,"assets":db.query(Asset).count() if db_ok else 0,"alerts":db.query(Alert).count() if db_ok else 0}}
+
+# ── Autonomous Engine Status ──────────────────────────────────────────────────
+
+@app.get("/api/v1/engine/status")
+def engine_status(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    from scheduler import scheduler
+    from discovery import registry as svc_registry
+    sched_status = scheduler.status()
+    reg = svc_registry.snapshot()
+    return {
+        "discovery_job": sched_status.get("datasource_ingestion", {}).get("auto-discovery"),
+        "threat_job": sched_status.get("datasource_ingestion", {}).get("threat-detection"),
+        "scan_network_enabled": os.getenv("SCAN_NETWORK", "true").lower() not in ("false", "0", "no"),
+        "registry": reg,
+        "auto_response_enabled": os.getenv("AUTO_RESPONSE", "false").lower() in ("true","1","yes"),
+        "auto_response_level": os.getenv("AUTO_RESPONSE_LEVEL", "safe"),
+        "assets_discovered": db.query(Asset).count(),
+        "open_alerts": db.query(Alert).filter(Alert.status == AlertStatus.open).count(),
+        "open_findings": db.query(Finding).filter(Finding.status == FindingStatus.open).count(),
+        "open_incidents": db.query(Incident).filter(Incident.status.in_([IncidentStatus.new, IncidentStatus.investigating])).count(),
+    }
+
+@app.post("/api/v1/engine/scan")
+def trigger_scan(mode: str = "both", current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Manually trigger a discovery or threat scan cycle."""
+    import threading
+    from discovery.engine import DiscoveryEngine
+    from threats.engine import ThreatEngine
+
+    result = {"triggered": [], "error": None}
+    try:
+        if mode in ("discovery", "both"):
+            threading.Thread(target=DiscoveryEngine(SessionLocal).run, daemon=True, name="discovery-manual").start()
+            result["triggered"].append("discovery")
+        if mode in ("threats", "both"):
+            threading.Thread(target=ThreatEngine(SessionLocal).run, daemon=True, name="threat-manual").start()
+            result["triggered"].append("threat-detection")
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+# ── Datasources & Telemetry Pipeline ─────────────────────────────────────────
+
+@app.get("/api/v1/datasources")
+def list_datasources_route(environment_id: Optional[str] = None, _: User = Depends(get_current_user)):
+    from datasources.store import list_datasources
+    return [ds.model_dump(mode="json") for ds in list_datasources(environment_id)]
+
+@app.post("/api/v1/datasources/test")
+def test_datasource_route(data: dict = Body(...), _: User = Depends(get_current_user)):
+    from datasources.models import DataSourceTestRequest
+    from datasources.store import test_datasource_connection
+    try:
+        result = test_datasource_connection(DataSourceTestRequest(**data))
+        return result.model_dump(mode="json")
+    except (ValueError, KeyError) as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/v1/datasources")
+def create_datasource_route(data: dict = Body(...), _: User = Depends(get_current_user)):
+    from datasources.models import DataSourceCreate
+    from datasources.store import save_datasource
+    try:
+        ds = save_datasource(DataSourceCreate(**data))
+        return ds.model_dump(mode="json")
+    except (ValueError, KeyError) as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/v1/datasources/{datasource_id}")
+def get_datasource_route(datasource_id: str, _: User = Depends(get_current_user)):
+    from datasources.store import get_datasource
+    ds = get_datasource(datasource_id)
+    if not ds:
+        raise HTTPException(404, "Datasource not found")
+    return ds.model_dump(mode="json")
+
+@app.delete("/api/v1/datasources/{datasource_id}")
+def delete_datasource_route(datasource_id: str, _: User = Depends(get_current_user)):
+    from datasources.store import delete_datasource
+    if not delete_datasource(datasource_id):
+        raise HTTPException(404, "Datasource not found")
+    return {"message": "Datasource deleted"}
+
+@app.post("/api/v1/datasources/{datasource_id}/ingest")
+def ingest_datasource_now(datasource_id: str, _: User = Depends(get_current_user)):
+    from datasources.jobs.runtime import run_ingestion_job
+    try:
+        job = run_ingestion_job(datasource_id)
+        return job.model_dump(mode="json")
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+@app.get("/api/v1/datasources/{datasource_id}/jobs")
+def get_datasource_job(datasource_id: str, _: User = Depends(get_current_user)):
+    from datasources.jobs import get_job_by_datasource
+    job = get_job_by_datasource(datasource_id)
+    if not job:
+        raise HTTPException(404, "No ingestion job found for datasource")
+    return job.model_dump(mode="json")
+
+@app.post("/api/v1/datasources/{datasource_id}/schedule")
+def schedule_datasource_route(datasource_id: str, data: dict = Body(...), _: User = Depends(get_current_user)):
+    from datasources.models import DataSourceScheduleRequest
+    from datasources.jobs.runtime import schedule_datasource_ingestion
+    try:
+        req = DataSourceScheduleRequest(**data)
+        job = schedule_datasource_ingestion(datasource_id, req.trigger_mode, req.interval_seconds, req.enabled)
+        return job.model_dump(mode="json")
+    except (ValueError, KeyError) as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/v1/data/query")
+def query_data_route(environment_id: str, data: dict = Body(...), _: User = Depends(get_current_user)):
+    from datasources.pipeline.query import query_data
+    try:
+        return query_data(environment_id, data)
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/v1/data/records/{datasource_id}")
+def get_datasource_records(datasource_id: str, page: int = 1, page_size: int = 50, record_type: Optional[str] = None, _: User = Depends(get_current_user)):
+    from datasources.store import get_datasource
+    from datasources.pipeline.storage import list_records_paginated
+    ds = get_datasource(datasource_id)
+    if not ds:
+        raise HTTPException(404, "Datasource not found")
+    return list_records_paginated(ds.environment_id, datasource_id, record_type=record_type, page=page, page_size=page_size)
+
+@app.get("/api/v1/telemetry/status")
+def telemetry_status(_: User = Depends(get_current_user)):
+    from datasources.store import list_datasources
+    from datasources.jobs import get_job_by_datasource
+    from datasources.pipeline.storage import list_records
+    result = []
+    for ds in list_datasources():
+        job = get_job_by_datasource(ds.datasource_id)
+        recent = list_records(ds.environment_id, ds.datasource_id)
+        result.append({
+            "datasource_id": ds.datasource_id,
+            "name": ds.name,
+            "type": ds.type,
+            "environment_id": ds.environment_id,
+            "status": ds.status,
+            "ingestion_enabled": ds.ingestion_enabled,
+            "ingestion_interval_seconds": ds.ingestion_interval_seconds,
+            "job_status": job.status if job else "not-scheduled",
+            "last_run_at": job.last_run_at.isoformat() if job and job.last_run_at else None,
+            "next_run_at": job.next_run_at.isoformat() if job and job.next_run_at else None,
+            "records_ingested": job.records_ingested if job else 0,
+            "last_record_at": recent[0].observed_at.isoformat() if recent else None,
+        })
+    return result
 
 if __name__=="__main__":
     import uvicorn
