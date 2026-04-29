@@ -42,7 +42,7 @@ export function DetectionRules() {
                       </td>
                       <td><span className="badge badge-info">{r.rule_type}</span></td>
                       <td><SeverityBadge severity={r.severity} /></td>
-                      <td className="text-gray-500 text-xs">{r.mitre_tactic}</td>
+                      <td className="text-gray-500 text-xs">{r.mitre_techniques?.[0] ?? '—'}</td>
                       <td>
                         <div className={`w-8 h-4 rounded-full flex items-center px-0.5 ${r.enabled ? 'bg-green-600' : 'bg-gray-700'}`}>
                           <div className={`w-3 h-3 rounded-full bg-white transition-transform ${r.enabled ? 'translate-x-4' : ''}`} />

@@ -20,8 +20,8 @@ export function ThreatHunting() {
       <div className="space-y-5">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <MetricCard label="Total Queries" value={data?.total ?? 0} color="blue" />
-          <MetricCard label="KQL" value={data?.items.filter((q) => q.query_type === 'kql').length ?? 0} color="purple" />
-          <MetricCard label="SQL" value={data?.items.filter((q) => q.query_type === 'sql').length ?? 0} color="orange" />
+          <MetricCard label="KQL" value={data?.items.filter((q) => q.data_source === 'kql').length ?? 0} color="purple" />
+          <MetricCard label="SQL" value={data?.items.filter((q) => q.data_source === 'sql').length ?? 0} color="orange" />
         </div>
         <div className="card">
           <div className="p-4 border-b border-gray-800 flex items-center gap-2">
@@ -38,8 +38,8 @@ export function ThreatHunting() {
                       <p className="text-xs text-gray-600 mt-0.5">{q.description}</p>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
-                      <span className="badge badge-purple">{q.query_type}</span>
-                      <span className="badge badge-info">{q.mitre_technique}</span>
+                      <span className="badge badge-purple">{q.data_source}</span>
+                      {q.mitre_techniques?.slice(0, 1).map((t) => <span key={t} className="badge badge-info">{t}</span>)}
                     </div>
                   </div>
                   <pre className="text-xs bg-gray-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">{q.query}</pre>

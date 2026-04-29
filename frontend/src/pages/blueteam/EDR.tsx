@@ -40,9 +40,9 @@ export function EDR() {
                       <td><span className="badge badge-info">{e.event_type}</span></td>
                       <td className="font-medium text-gray-200 text-xs">{e.process_name}</td>
                       <td className="font-mono text-xs text-gray-500 max-w-xs truncate">{e.command_line}</td>
-                      <td className="text-gray-500 text-xs">{e.user}</td>
-                      <td className="text-gray-600 text-xs">{e.mitre_technique}</td>
-                      <td className="text-gray-600 text-xs">{new Date(e.timestamp).toLocaleString()}</td>
+                      <td className="text-gray-500 text-xs">{e.username}</td>
+                      <td className="text-gray-600 text-xs">{e.rule_name}</td>
+                      <td className="text-gray-600 text-xs">{new Date(e.created_at).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -20,8 +20,8 @@ export function Recon() {
       <div className="space-y-5">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <MetricCard label="Total Records" value={data?.total ?? 0} color="red" />
-          <MetricCard label="OSINT" value={data?.items.filter((r) => r.recon_type === 'osint').length ?? 0} color="purple" />
-          <MetricCard label="Network" value={data?.items.filter((r) => r.recon_type === 'network').length ?? 0} color="blue" />
+          <MetricCard label="OSINT" value={data?.items.filter((r) => r.type === 'osint').length ?? 0} color="purple" />
+          <MetricCard label="Network" value={data?.items.filter((r) => r.type === 'network').length ?? 0} color="blue" />
         </div>
         <div className="card">
           <div className="p-4 border-b border-gray-800 flex items-center gap-2">
@@ -31,14 +31,14 @@ export function Recon() {
           {loading ? <PageLoading /> : data?.items.length === 0 ? <EmptyState title="No recon records" /> : (
             <div className="table-wrapper">
               <table>
-                <thead><tr><th>Target</th><th>Type</th><th>Tools Used</th><th>Executed</th></tr></thead>
+                <thead><tr><th>Target</th><th>Type</th><th>Source</th><th>Created</th></tr></thead>
                 <tbody>
                   {data?.items.map((r) => (
                     <tr key={r.id}>
                       <td className="font-medium text-gray-200 font-mono text-xs">{r.target}</td>
-                      <td><span className="badge badge-purple">{r.recon_type}</span></td>
-                      <td className="text-gray-500 text-xs">{r.tools_used?.join(', ')}</td>
-                      <td className="text-gray-600 text-xs">{new Date(r.executed_at).toLocaleString()}</td>
+                      <td><span className="badge badge-purple">{r.type}</span></td>
+                      <td className="text-gray-500 text-xs">{r.source}</td>
+                      <td className="text-gray-600 text-xs">{new Date(r.created_at).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

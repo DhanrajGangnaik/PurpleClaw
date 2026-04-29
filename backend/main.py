@@ -1,4 +1,5 @@
-import os, logging, random, enum
+import os, logging, random, enum, threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException, Body
@@ -52,13 +53,8 @@ def obj_to_dict(obj):
         d[col.name] = val
     return d
 
-app = FastAPI(title="PurpleClaw API", version="2.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
-_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] if _raw_origins else ["*"]
-app.add_middleware(CORSMiddleware, allow_origins=_allowed_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     os.makedirs("data", exist_ok=True)
     Base.metadata.create_all(bind=engine)
 
@@ -89,14 +85,12 @@ async def startup():
         _disc = DiscoveryEngine(SessionLocal)
         _threat = ThreatEngine(SessionLocal)
 
-        discovery_interval = int(os.getenv("DISCOVERY_INTERVAL", "900"))   # 15 min
-        threat_interval = int(os.getenv("THREAT_INTERVAL", "300"))         # 5 min
+        discovery_interval = int(os.getenv("DISCOVERY_INTERVAL", "900"))
+        threat_interval = int(os.getenv("THREAT_INTERVAL", "300"))
 
         _sched.register_interval_job("auto-discovery", discovery_interval, _disc.run)
         _sched.register_interval_job("threat-detection", threat_interval, _threat.run)
 
-        # Fire both immediately on startup (non-blocking via thread)
-        import threading
         threading.Thread(target=_disc.run, daemon=True, name="discovery-init").start()
         threading.Thread(target=_threat.run, daemon=True, name="threat-init").start()
 
@@ -114,6 +108,14 @@ async def startup():
         import traceback; traceback.print_exc()
     finally:
         db.close()
+
+    yield  # application runs
+
+
+app = FastAPI(title="PurpleClaw API", version="2.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] if _raw_origins else ["*"]
+app.add_middleware(CORSMiddleware, allow_origins=_allowed_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 @app.get("/api/v1/health")
 def health():
@@ -506,8 +508,9 @@ def add_case_evidence(case_id:int,data:dict=Body(...),db:Session=Depends(get_db)
 
 # SIEM
 @app.get("/api/v1/siem/events")
-def list_log_events(page:int=1,size:int=50,level:Optional[str]=None,category:Optional[str]=None,source_ip:Optional[str]=None,search:Optional[str]=None,db:Session=Depends(get_db),_:User=Depends(get_current_user)):
+def list_log_events(page:int=1,size:int=50,level:Optional[str]=None,category:Optional[str]=None,source_ip:Optional[str]=None,search:Optional[str]=None,source_id:Optional[int]=None,db:Session=Depends(get_db),_:User=Depends(get_current_user)):
     q=db.query(LogEvent)
+    if source_id: q=q.filter(LogEvent.source_id==source_id)
     if level: q=q.filter(LogEvent.level==level)
     if category: q=q.filter(LogEvent.category==category)
     if source_ip: q=q.filter(LogEvent.source_ip.ilike(f"%{source_ip}%"))
@@ -764,7 +767,8 @@ def list_scans(page:int=1,size:int=20,status:Optional[str]=None,type:Optional[st
 
 @app.post("/api/v1/scans")
 def create_scan(data:dict=Body(...),db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
-    sj=ScanJob(name=data.get("name",f"Scan {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"),target=data["target"],type=data.get("type","vulnerability"),policy=data.get("policy","quick"),scanner=data.get("scanner","internal"),status=ScanStatus.pending,created_by_id=current_user.id)
+    # target defaults to "all" so missing key doesn't KeyError
+    sj=ScanJob(name=data.get("name",f"Scan {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"),target=data.get("target","all"),type=data.get("type","vulnerability"),policy=data.get("policy","quick"),scanner=data.get("scanner","internal"),status=ScanStatus.pending,created_by_id=current_user.id)
     db.add(sj); db.commit(); db.refresh(sj); return obj_to_dict(sj)
 
 @app.get("/api/v1/scans/stats")
@@ -806,6 +810,13 @@ def update_plan(plan_id:int,data:dict=Body(...),db:Session=Depends(get_db),_:Use
     for k,v in data.items():
         if hasattr(p,k): setattr(p,k,v)
     db.commit(); return obj_to_dict(p)
+
+@app.post("/api/v1/redteam/plans/{plan_id}/execute")
+def execute_plan(plan_id:int,db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
+    p=db.query(AttackPlan).filter(AttackPlan.id==plan_id).first()
+    if not p: raise HTTPException(404,"Plan not found")
+    ex=AttackExecution(plan_id=plan_id,name=f"{p.name} — execution",operator=current_user.full_name,status="running",notes="")
+    db.add(ex); db.commit(); db.refresh(ex); return obj_to_dict(ex)
 
 @app.post("/api/v1/redteam/plans/{plan_id}/approve")
 def approve_plan(plan_id:int,db:Session=Depends(get_db),current_user:User=Depends(get_current_user)):
@@ -978,7 +989,7 @@ def list_coverage(tactic_id:Optional[str]=None,db:Session=Depends(get_db),_:User
             d["technique_name"]=tech.name; d["tactic_ids"]=tech.tactic_ids
             if tactic_id and tactic_id not in (tech.tactic_ids or []): continue
         items.append(d)
-    return {"items":items,"total":len(items)}
+    return items
 
 @app.get("/api/v1/purpleteam/coverage/matrix")
 def coverage_matrix(db:Session=Depends(get_db),_:User=Depends(get_current_user)):
@@ -1419,6 +1430,87 @@ def telemetry_status(_: User = Depends(get_current_user)):
             "last_record_at": recent[0].observed_at.isoformat() if recent else None,
         })
     return result
+
+
+# ── Route aliases for frontend compatibility ──────────────────────────────────
+# These cover structural mismatches where path shape differs from api.ts calls.
+
+@app.get("/api/v1/compliance/summary")
+def compliance_summary_alias(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /compliance/summary, backend logic is at /compliance/score."""
+    return compliance_score(db=db, _=_)
+
+@app.get("/api/v1/compliance/controls/{control_id}/assessments")
+def list_control_assessments(control_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    return [obj_to_dict(a) for a in db.query(ComplianceAssessment).filter(ComplianceAssessment.control_id == control_id).all()]
+
+@app.get("/api/v1/vulnerabilities")
+def list_vulns_alias(page: int = 1, size: int = 20, severity: Optional[str] = None, search: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /vulnerabilities, backend has /vulns."""
+    return list_vulns(page=page, size=size, severity=severity, search=search, db=db, _=_)
+
+@app.get("/api/v1/detection/rules")
+def list_detection_rules_alias(page: int = 1, size: int = 20, enabled: Optional[bool] = None, severity: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /detection/rules, backend has /siem/rules."""
+    return list_detection_rules(page=page, size=size, enabled=enabled, severity=severity, db=db, _=_)
+
+@app.get("/api/v1/hunting/queries")
+def list_hunting_queries_alias(page: int = 1, size: int = 20, search: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /hunting/queries, backend has /blueteam/hunting-queries."""
+    return list_hunting_queries(page=page, size=size, search=search, db=db, _=_)
+
+@app.get("/api/v1/edr/events")
+def list_edr_events_alias(page: int = 1, size: int = 50, event_type: Optional[str] = None, severity: Optional[str] = None, blocked: Optional[bool] = None, asset_id: Optional[int] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /edr/events, backend has /blueteam/edr-events."""
+    return list_edr_events(page=page, size=size, event_type=event_type, severity=severity, blocked=blocked, asset_id=asset_id, db=db, _=_)
+
+@app.get("/api/v1/fim/records")
+def list_fim_alias(page: int = 1, size: int = 20, status: Optional[str] = None, asset_id: Optional[int] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /fim/records, backend has /blueteam/fim."""
+    return list_fim(page=page, size=size, status=status, asset_id=asset_id, db=db, _=_)
+
+@app.get("/api/v1/vulnmgmt/scans")
+def list_scans_alias(page: int = 1, size: int = 20, status: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /vulnmgmt/scans, backend has /scans."""
+    return list_scans(page=page, size=size, status=status, db=db, _=_)
+
+@app.post("/api/v1/vulnmgmt/scans")
+def create_scan_alias(data: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Alias: frontend calls /vulnmgmt/scans POST, backend has /scans POST."""
+    return create_scan(data=data, db=db, current_user=current_user)
+
+@app.get("/api/v1/vulnmgmt/remediation")
+def list_remediation_alias(page: int = 1, size: int = 20, status: Optional[str] = None, priority: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /vulnmgmt/remediation, backend has /remediation."""
+    return list_all_remediation(page=page, size=size, status=status, priority=priority, db=db, _=_)
+
+@app.get("/api/v1/ir/playbooks")
+def list_playbooks_ir_alias(page: int = 1, size: int = 20, type: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /ir/playbooks, backend has /playbooks."""
+    return list_playbooks(page=page, size=size, type=type, db=db, _=_)
+
+@app.post("/api/v1/ir/playbooks")
+def create_playbook_ir_alias(data: dict = Body(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return create_playbook(data=data, db=db, current_user=current_user)
+
+@app.get("/api/v1/ir/executions")
+def list_ir_executions_alias(page: int = 1, size: int = 20, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /ir/executions, backend has /playbooks/executions."""
+    return list_pb_executions(page=page, size=size, db=db, _=_)
+
+@app.post("/api/v1/ir/playbooks/{pb_id}/execute")
+def execute_playbook_ir_alias(pb_id: int, data: dict = Body(default={}), db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    return execute_playbook(pb_id=pb_id, data=data, db=db, _=_)
+
+@app.get("/api/v1/purpleteam/mitre/tactics")
+def list_mitre_tactics_alias(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /purpleteam/mitre/tactics, backend has /mitre/tactics."""
+    return list_tactics(db=db, _=_)
+
+@app.get("/api/v1/purpleteam/mitre/techniques")
+def list_mitre_techniques_alias(tactic_id: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Alias: frontend calls /purpleteam/mitre/techniques, backend has /mitre/techniques."""
+    return list_techniques(tactic_id=tactic_id, db=db, _=_)
 
 if __name__=="__main__":
     import uvicorn

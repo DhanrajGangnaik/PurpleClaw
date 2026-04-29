@@ -22,7 +22,7 @@ export function Vulnerabilities() {
           <MetricCard label="Total CVEs" value={data?.total ?? 0} color="orange" />
           <MetricCard label="Critical" value={data?.items.filter((v) => v.severity === 'critical').length ?? 0} color="red" />
           <MetricCard label="With Exploit" value={data?.items.filter((v) => v.exploit_available).length ?? 0} color="red" />
-          <MetricCard label="Patchable" value={data?.items.filter((v) => v.patch_available).length ?? 0} color="green" />
+          <MetricCard label="Patchable" value={data?.items.filter((v) => v.patches?.length > 0).length ?? 0} color="green" />
         </div>
         <div className="card">
           <div className="p-4 border-b border-gray-800 flex items-center gap-2">
@@ -48,8 +48,8 @@ export function Vulnerabilities() {
                       </td>
                       <td><SeverityBadge severity={v.severity} /></td>
                       <td>{v.exploit_available ? <span className="text-red-400 text-xs font-medium">Yes</span> : <span className="text-gray-600 text-xs">No</span>}</td>
-                      <td>{v.patch_available ? <span className="text-green-400 text-xs font-medium">Yes</span> : <span className="text-gray-600 text-xs">No</span>}</td>
-                      <td className="text-gray-600 text-xs">{new Date(v.published_date).toLocaleDateString()}</td>
+                      <td>{v.patches?.length > 0 ? <span className="text-green-400 text-xs font-medium">Yes</span> : <span className="text-gray-600 text-xs">No</span>}</td>
+                      <td className="text-gray-600 text-xs">{v.published_at ? new Date(v.published_at).toLocaleDateString() : '-'}</td>
                     </tr>
                   ))}
                 </tbody>

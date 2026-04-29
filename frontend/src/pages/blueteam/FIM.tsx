@@ -15,16 +15,17 @@ export function FIM() {
     getFIMRecords(page, 50).then(setData).finally(() => setLoading(false));
   }, [page]);
 
-  const evtColor = (t: string) => t === 'created' ? 'text-green-400' : t === 'deleted' ? 'text-red-400' : t === 'modified' ? 'text-yellow-400' : 'text-blue-400';
+  // FIMRecord.status holds the event type (backend enum: ok/modified/missing/new)
+  const evtColor = (t: string) => t === 'new' ? 'text-green-400' : t === 'missing' ? 'text-red-400' : t === 'modified' ? 'text-yellow-400' : 'text-blue-400';
 
   return (
     <Layout title="File Integrity Monitoring">
       <div className="space-y-5">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard label="Total Events" value={data?.total ?? 0} color="blue" />
-          <MetricCard label="Modified" value={data?.items.filter((r) => r.event_type === 'modified').length ?? 0} color="yellow" />
-          <MetricCard label="Created" value={data?.items.filter((r) => r.event_type === 'created').length ?? 0} color="green" />
-          <MetricCard label="Deleted" value={data?.items.filter((r) => r.event_type === 'deleted').length ?? 0} color="red" />
+          <MetricCard label="Modified" value={data?.items.filter((r) => r.status === 'modified').length ?? 0} color="yellow" />
+          <MetricCard label="New" value={data?.items.filter((r) => r.status === 'new').length ?? 0} color="green" />
+          <MetricCard label="Missing" value={data?.items.filter((r) => r.status === 'missing').length ?? 0} color="red" />
         </div>
         <div className="card">
           <div className="p-4 border-b border-gray-800 flex items-center gap-2">
@@ -34,19 +35,14 @@ export function FIM() {
           {loading ? <PageLoading /> : data?.items.length === 0 ? <EmptyState title="No FIM events" /> : (
             <div className="table-wrapper">
               <table>
-                <thead><tr><th>Event</th><th>File Path</th><th>Modified By</th><th>Hash Change</th><th>Time</th></tr></thead>
+                <thead><tr><th>Status</th><th>File Path</th><th>Asset</th><th>Time</th></tr></thead>
                 <tbody>
                   {data?.items.map((r) => (
                     <tr key={r.id}>
-                      <td><span className={`text-xs font-semibold ${evtColor(r.event_type)}`}>{r.event_type}</span></td>
-                      <td className="font-mono text-xs text-gray-400 max-w-xs truncate">{r.file_path}</td>
-                      <td className="text-gray-500 text-xs">{r.modified_by}</td>
-                      <td>
-                        {r.hash_before !== r.hash_after && (
-                          <span className="text-xs text-yellow-400">Hash changed</span>
-                        )}
-                      </td>
-                      <td className="text-gray-600 text-xs">{new Date(r.timestamp).toLocaleString()}</td>
+                      <td><span className={`text-xs font-semibold ${evtColor(r.status)}`}>{r.status}</span></td>
+                      <td className="font-mono text-xs text-gray-400 max-w-xs truncate">{r.path}</td>
+                      <td className="text-gray-500 text-xs">Asset #{r.asset_id}</td>
+                      <td className="text-gray-600 text-xs">{new Date(r.checked_at).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

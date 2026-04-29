@@ -43,7 +43,7 @@ export function Campaigns() {
                       <td className="text-gray-500 text-xs">{c.targets?.slice(0, 2).join(', ')}</td>
                       <td>
                         <div className="flex flex-wrap gap-1">
-                          {c.techniques?.slice(0, 3).map((t) => <span key={t} className="badge badge-purple text-xs">{t}</span>)}
+                          {c.ttps?.slice(0, 3).map((t) => <span key={t} className="badge badge-purple text-xs">{t}</span>)}
                         </div>
                       </td>
                       <td className="text-gray-600 text-xs">{new Date(c.start_date).toLocaleDateString()}</td>

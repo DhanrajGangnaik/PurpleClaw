@@ -20,9 +20,10 @@ export function Payloads() {
       <div className="space-y-5">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard label="Total" value={data?.total ?? 0} color="red" />
-          <MetricCard label="Obfuscated" value={data?.items.filter((p) => p.obfuscated).length ?? 0} color="orange" />
-          <MetricCard label="AV Detected" value={data?.items.filter((p) => p.detected_by_av).length ?? 0} color="purple" />
-          <MetricCard label="Evasion Rate" value={`${data?.items.length ? Math.round(data.items.filter((p) => !p.detected_by_av).length / data.items.length * 100) : 0}%`} color="green" />
+          {/* obfuscated/detected_by_av not stored in backend model */}
+          <MetricCard label="Shellcode" value={data?.items.filter((p) => p.type === 'shellcode').length ?? 0} color="orange" />
+          <MetricCard label="Scripts" value={data?.items.filter((p) => p.type === 'script').length ?? 0} color="purple" />
+          <MetricCard label="Executables" value={data?.items.filter((p) => p.type === 'executable').length ?? 0} color="green" />
         </div>
         <div className="card">
           <div className="p-4 border-b border-gray-800 flex items-center gap-2">
@@ -32,16 +33,18 @@ export function Payloads() {
           {loading ? <PageLoading /> : data?.items.length === 0 ? <EmptyState icon={<Cpu className="w-10 h-10" />} title="No payloads" /> : (
             <div className="table-wrapper">
               <table>
-                <thead><tr><th>Name</th><th>Type</th><th>Language</th><th>Obfuscated</th><th>AV Detected</th><th>Tags</th></tr></thead>
+                <thead><tr><th>Name</th><th>Type</th><th>Platform</th><th>Tags</th><th>Created</th></tr></thead>
                 <tbody>
                   {data?.items.map((p) => (
                     <tr key={p.id}>
-                      <td className="font-medium text-gray-200">{p.name}</td>
-                      <td><span className="badge badge-purple">{p.payload_type}</span></td>
-                      <td className="text-gray-500 text-xs">{p.language}</td>
-                      <td>{p.obfuscated ? <span className="text-green-400 text-xs">Yes</span> : <span className="text-gray-600 text-xs">No</span>}</td>
-                      <td>{p.detected_by_av ? <span className="text-red-400 text-xs">Yes</span> : <span className="text-green-400 text-xs">No</span>}</td>
+                      <td>
+                        <div className="font-medium text-gray-200">{p.name}</div>
+                        <div className="text-xs text-gray-600 truncate max-w-xs">{p.description}</div>
+                      </td>
+                      <td><span className="badge badge-purple">{p.type}</span></td>
+                      <td className="text-gray-500 text-xs">{p.platform}</td>
                       <td className="text-gray-500 text-xs">{p.tags?.slice(0, 3).join(', ')}</td>
+                      <td className="text-gray-600 text-xs">{new Date(p.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>

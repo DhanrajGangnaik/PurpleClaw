@@ -21,8 +21,9 @@ export function Incidents() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard label="Total" value={data?.total ?? 0} color="purple" />
           <MetricCard label="Critical" value={data?.items.filter((i) => i.severity === 'critical').length ?? 0} color="red" />
-          <MetricCard label="Open" value={data?.items.filter((i) => i.status === 'open').length ?? 0} color="orange" />
-          <MetricCard label="Resolved" value={data?.items.filter((i) => i.status === 'resolved').length ?? 0} color="green" />
+          {/* Backend statuses: new/triaged/investigating/contained/eradicated/recovering/closed */}
+          <MetricCard label="Active" value={data?.items.filter((i) => i.status !== 'closed').length ?? 0} color="orange" />
+          <MetricCard label="Closed" value={data?.items.filter((i) => i.status === 'closed').length ?? 0} color="green" />
         </div>
 
         <div className="card">
@@ -44,9 +45,9 @@ export function Incidents() {
                         <div className="font-medium text-gray-200 text-sm">{i.title}</div>
                         <div className="text-xs text-gray-600 truncate max-w-xs">{i.description}</div>
                       </td>
-                      <td className="text-gray-500 text-xs">{i.incident_type?.replace(/_/g, ' ')}</td>
+                      <td className="text-gray-500 text-xs">—</td>
                       <td><StatusBadge status={i.status} /></td>
-                      <td className="text-gray-500 text-xs">{i.assigned_to}</td>
+                      <td className="text-gray-500 text-xs">{i.assignee_id ? `User #${i.assignee_id}` : '—'}</td>
                       <td className="text-gray-600 text-xs">{new Date(i.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}

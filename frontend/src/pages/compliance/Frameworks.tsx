@@ -16,7 +16,9 @@ export function Frameworks() {
       .finally(() => setLoading(false));
   }, []);
 
-  const overall = typeof summary.overall_compliance === 'number' ? summary.overall_compliance : 0;
+  // Backend returns overall as 0-100 integer; by_framework is [{name, score}]
+  const overall = typeof summary.overall === 'number' ? (summary.overall as number) / 100 : 0;
+  const byFramework = Array.isArray(summary.by_framework) ? (summary.by_framework as { name: string; score: number }[]) : [];
 
   return (
     <Layout title="Compliance Frameworks">
@@ -24,8 +26,8 @@ export function Frameworks() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard label="Frameworks" value={frameworks.length} color="purple" />
           <MetricCard label="Overall Compliance" value={`${Math.round(overall * 100)}%`} color="green" />
-          <MetricCard label="Total Controls" value={frameworks.reduce((s, f) => s + f.total_controls, 0)} color="blue" />
-          <MetricCard label="Categories" value={[...new Set(frameworks.map((f) => f.category))].length} color="orange" />
+          <MetricCard label="Total Controls" value={frameworks.reduce((s, f) => s + f.controls_count, 0)} color="blue" />
+          <MetricCard label="Avg Score" value={`${Math.round(overall * 100)}%`} color="orange" />
         </div>
 
         <div className="card p-5">
@@ -36,15 +38,15 @@ export function Frameworks() {
           {loading ? <PageLoading /> : frameworks.length === 0 ? <EmptyState title="No frameworks" /> : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {frameworks.map((f) => {
-                const fComp = typeof summary[`${f.name.toLowerCase().replace(/\s/g, '_')}_compliance`] === 'number'
-                  ? (summary[`${f.name.toLowerCase().replace(/\s/g, '_')}_compliance`] as number) * 100
-                  : Math.random() * 40 + 60;
+                // Look up score from by_framework array; fallback to 0
+                const entry = byFramework.find((b) => b.name === f.name);
+                const fComp = entry ? entry.score : 0;
                 return (
                   <div key={f.id} className="bg-gray-800/50 rounded-xl p-5 border border-gray-700/50">
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="text-sm font-bold text-gray-200">{f.name}</h3>
-                        <p className="text-xs text-gray-600">v{f.version} · {f.category}</p>
+                        <p className="text-xs text-gray-600">v{f.version}</p>
                       </div>
                       <span className="text-lg font-bold text-purple-400">{Math.round(fComp)}%</span>
                     </div>
@@ -52,7 +54,7 @@ export function Frameworks() {
                       <div className={`h-full rounded-full ${fComp >= 80 ? 'bg-green-500' : fComp >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${fComp}%` }} />
                     </div>
                     <p className="text-xs text-gray-600 mb-2">{f.description}</p>
-                    <p className="text-xs text-gray-500">{f.total_controls} controls</p>
+                    <p className="text-xs text-gray-500">{f.controls_count} controls</p>
                   </div>
                 );
               })}

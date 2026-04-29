@@ -12,9 +12,9 @@ services:
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-change-this-to-a-long-random-secret-in-prod}
       AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-480}
 
-      # Bootstrap admin account (change immediately after first login)
+      # Bootstrap admin account (login: admin / admin — change in production)
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-PurpleClaw@2024!}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
 
       # CORS — comma-separated list of allowed frontend origins
       # Use * only in dev; set to your actual domain(s) in production

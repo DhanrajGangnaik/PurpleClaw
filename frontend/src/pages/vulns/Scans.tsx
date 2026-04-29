@@ -16,7 +16,8 @@ export function Scans() {
 
   const runScan = async () => {
     try {
-      await createScanJob({ name: `Manual Scan ${new Date().toLocaleTimeString()}`, scan_type: 'vulnerability', status: 'running', target_assets: [] });
+      // Backend requires target string, type (not scan_type), policy
+      await createScanJob({ name: `Manual Scan ${new Date().toLocaleTimeString()}`, type: 'vulnerability', status: 'pending', target: 'all', policy: 'quick' });
       toast.success('Scan started');
       load();
     } catch { toast.error('Failed to start scan'); }
@@ -47,7 +48,7 @@ export function Scans() {
                   {data?.items.map((s) => (
                     <tr key={s.id}>
                       <td className="font-medium text-gray-200">{s.name}</td>
-                      <td><span className="badge badge-blue">{s.scan_type}</span></td>
+                      <td><span className="badge badge-blue">{s.type}</span></td>
                       <td><StatusBadge status={s.status} /></td>
                       <td className="text-gray-400 text-sm">{s.findings_count}</td>
                       <td className="text-gray-600 text-xs">{s.started_at ? new Date(s.started_at).toLocaleString() : '-'}</td>

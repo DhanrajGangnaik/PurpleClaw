@@ -4,7 +4,7 @@ import {
   Bug, FileBarChart2, Settings, ChevronLeft, ChevronRight,
   Radar, Activity, Search, Globe, FolderOpen, Target,
   Network, Eye, Server, BookOpen, CheckSquare, Users,
-  Cpu, Swords, FileText, ShieldCheck, ChevronDown, ChevronUp
+  Cpu, Swords, FileText, ShieldCheck, ChevronDown, ChevronUp, Zap
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -90,6 +90,7 @@ const groups = [
       { to: '/settings/users', icon: Users, label: 'Users' },
       { to: '/settings/audit', icon: Shield, label: 'Audit Log' },
       { to: '/settings/system', icon: Settings, label: 'System' },
+      { to: '/settings/engine', icon: Zap, label: 'Engine Status' },
     ],
   },
 ];

@@ -45,7 +45,7 @@ export function ThreatActors() {
                       </div>
                       <div className="flex gap-2 mt-1">
                         <span className={`badge ${sophisticationColor(a.sophistication)}`}>{a.sophistication}</span>
-                        <span className="badge badge-info">{a.origin_country}</span>
+                        <span className="badge badge-info">{a.country}</span>
                       </div>
                     </div>
                   </div>

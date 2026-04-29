@@ -28,8 +28,8 @@ export function Alerts() {
   };
 
   const close = async (id: number) => {
-    await updateAlert(id, { status: 'closed' });
-    toast.success('Alert closed');
+    await updateAlert(id, { status: 'resolved' });
+    toast.success('Alert resolved');
     load();
   };
 
@@ -59,7 +59,8 @@ export function Alerts() {
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-36">
                 <option value="">All Statuses</option>
-                {['open','investigating','closed','false_positive'].map((s) => <option key={s} value={s}>{s}</option>)}
+                {/* AlertStatus enum: open/investigating/resolved/false_positive/suppressed — no 'closed' */}
+                {['open','investigating','resolved','false_positive','suppressed'].map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
               <button onClick={load} className="btn-secondary p-2"><RefreshCw className="w-4 h-4" /></button>
             </div>
@@ -88,7 +89,7 @@ export function Alerts() {
                             {a.status === 'open' && (
                               <button onClick={() => acknowledge(a.id)} className="text-xs text-purple-400 hover:text-purple-300 transition-colors">Ack</button>
                             )}
-                            {a.status !== 'closed' && (
+                            {a.status !== 'resolved' && (
                               <button onClick={() => close(a.id)} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">Close</button>
                             )}
                           </div>

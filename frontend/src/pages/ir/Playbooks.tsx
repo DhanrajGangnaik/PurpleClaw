@@ -24,8 +24,8 @@ export function Playbooks() {
       <div className="space-y-5">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <MetricCard label="Total Playbooks" value={data?.total ?? 0} color="blue" />
-          <MetricCard label="Active" value={data?.items.filter((p) => p.is_active).length ?? 0} color="green" />
-          <MetricCard label="Types" value={[...new Set(data?.items.map((p) => p.playbook_type) ?? [])].length} color="purple" />
+          <MetricCard label="Total Steps" value={data?.items.reduce((s, p) => s + (Array.isArray(p.steps_json) ? p.steps_json.length : 0), 0) ?? 0} color="green" />
+          <MetricCard label="Types" value={[...new Set(data?.items.map((p) => p.type) ?? [])].length} color="purple" />
         </div>
         <div className="card">
           <div className="p-4 border-b border-gray-800 flex items-center gap-2">
@@ -40,9 +40,7 @@ export function Playbooks() {
                     <div>
                       <h3 className="text-sm font-semibold text-gray-200">{p.name}</h3>
                       <div className="flex gap-2 mt-1">
-                        <span className="badge badge-purple">{p.playbook_type}</span>
-                        <span className="badge badge-info">Threshold: {p.severity_threshold}</span>
-                        {p.is_active && <span className="badge badge-success">Active</span>}
+                        <span className="badge badge-purple">{p.type}</span>
                       </div>
                     </div>
                     <button onClick={() => run(p.id)} className="btn-primary flex items-center gap-1 py-1.5 px-3">
@@ -51,14 +49,14 @@ export function Playbooks() {
                   </div>
                   <p className="text-xs text-gray-600 mb-3">{p.description}</p>
                   <div>
-                    <p className="text-xs text-gray-600 mb-1">Steps ({Array.isArray(p.steps) ? p.steps.length : 0})</p>
-                    {Array.isArray(p.steps) && p.steps.slice(0, 3).map((step: unknown, i) => (
+                    <p className="text-xs text-gray-600 mb-1">Steps ({Array.isArray(p.steps_json) ? p.steps_json.length : 0})</p>
+                    {Array.isArray(p.steps_json) && p.steps_json.slice(0, 3).map((step: unknown, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs text-gray-500 py-0.5">
                         <span className="w-4 h-4 rounded-full bg-purple-900/50 flex items-center justify-center text-purple-400 text-xs flex-shrink-0">{i+1}</span>
                         {typeof step === 'object' && step !== null && 'name' in step ? String((step as {name: string}).name) : String(step)}
                       </div>
                     ))}
-                    {Array.isArray(p.steps) && p.steps.length > 3 && <p className="text-xs text-gray-700 ml-6">+{p.steps.length - 3} more steps</p>}
+                    {Array.isArray(p.steps_json) && p.steps_json.length > 3 && <p className="text-xs text-gray-700 ml-6">+{p.steps_json.length - 3} more steps</p>}
                   </div>
                 </div>
               ))}

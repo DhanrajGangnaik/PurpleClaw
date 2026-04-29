@@ -33,6 +33,7 @@ import { Reports } from './pages/reports/Reports';
 import { UsersPage } from './pages/settings/Users';
 import { AuditLog } from './pages/settings/AuditLog';
 import { SystemSettings } from './pages/settings/System';
+import { Engine } from './pages/settings/Engine';
 
 function App() {
   const { isAuthenticated, loading } = useAuth();
@@ -84,6 +85,7 @@ function App() {
         <Route path="/settings/users" element={<UsersPage />} />
         <Route path="/settings/audit" element={<AuditLog />} />
         <Route path="/settings/system" element={<SystemSettings />} />
+        <Route path="/settings/engine" element={<Engine />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toaster position="top-right" toastOptions={{ style: { background: '#1f2937', color: '#f3f4f6', border: '1px solid #374151' } }} />

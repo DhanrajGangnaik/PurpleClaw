@@ -13,7 +13,7 @@ export function Network() {
     getAssets(1, 100).then((d) => setAssets(d.items)).finally(() => setLoading(false));
   }, []);
 
-  const byType = assets.reduce((acc, a) => { acc[a.asset_type] = (acc[a.asset_type] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+  const byType = assets.reduce((acc, a) => { acc[a.type] = (acc[a.type] ?? 0) + 1; return acc; }, {} as Record<string, number>);
 
   return (
     <Layout title="Network">
@@ -31,15 +31,15 @@ export function Network() {
           </div>
           {loading ? <PageLoading /> : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {assets.filter((a) => a.asset_type === 'network_device' || a.asset_type === 'firewall').map((a) => (
+              {assets.filter((a) => a.type === 'network_device' || a.type === 'firewall').map((a) => (
                 <div key={a.id} className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className={`w-3 h-3 rounded-full ${a.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <div className={`w-3 h-3 rounded-full ${a.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} />
                     <span className="font-medium text-gray-200 text-sm">{a.hostname}</span>
                     <span className="ml-auto font-mono text-xs text-gray-500">{a.ip_address}</span>
                   </div>
                   <div className="flex gap-4 text-xs text-gray-600">
-                    <span>Type: {a.asset_type}</span>
+                    <span>Type: {a.type}</span>
                     <span>Owner: {a.owner}</span>
                     <span>Risk: {a.risk_score}</span>
                   </div>

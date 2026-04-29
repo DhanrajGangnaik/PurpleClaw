@@ -27,7 +27,8 @@ export function Reports() {
     if (!reportTitle) { toast.error('Enter a report title'); return; }
     setGenerating(true);
     try {
-      await generateReport({ title: reportTitle, report_type: 'executive', template_id: selectedTemplate ? Number(selectedTemplate) : undefined });
+      // Backend expects name (not title) and type (not report_type)
+      await generateReport({ name: reportTitle, type: 'executive', template_id: selectedTemplate ? Number(selectedTemplate) : undefined });
       toast.success('Report generated');
       setReportTitle('');
       load();
@@ -70,8 +71,8 @@ export function Reports() {
                 <tbody>
                   {data?.items.map((r) => (
                     <tr key={r.id}>
-                      <td className="font-medium text-gray-200">{r.title}</td>
-                      <td><span className="badge badge-purple">{r.report_type}</span></td>
+                      <td className="font-medium text-gray-200">{r.name}</td>
+                      <td><span className="badge badge-purple">{r.type}</span></td>
                       <td><StatusBadge status={r.status} /></td>
                       <td className="text-gray-600 text-xs">{new Date(r.created_at).toLocaleString()}</td>
                     </tr>

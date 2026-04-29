@@ -37,7 +37,7 @@ export function Exercises() {
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold text-gray-200">{ex.name}</h3>
                         <StatusBadge status={ex.status} />
-                        <span className="badge badge-purple">{ex.exercise_type}</span>
+                        <span className="badge badge-purple">{ex.type}</span>
                       </div>
                       <p className="text-xs text-gray-600 mt-1">{ex.description}</p>
                     </div>

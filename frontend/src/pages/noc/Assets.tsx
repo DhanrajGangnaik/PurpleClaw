@@ -5,7 +5,8 @@ import { getAssets } from '../../services/api';
 import type { Asset, Paginated } from '../../services/api';
 import { Server } from 'lucide-react';
 
-const statusColor = (s: string) => s === 'online' ? 'text-green-400' : s === 'offline' ? 'text-red-400' : 'text-yellow-400';
+// Backend status values: active/inactive/unknown/compromised/quarantined
+const statusColor = (s: string) => s === 'active' ? 'text-green-400' : s === 'inactive' ? 'text-red-400' : 'text-yellow-400';
 
 export function Assets() {
   const [data, setData] = useState<Paginated<Asset> | null>(null);
@@ -25,7 +26,7 @@ export function Assets() {
       <div className="space-y-5">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard label="Total Assets" value={data?.total ?? 0} color="purple" />
-          <MetricCard label="Online" value={data?.items.filter((a) => a.status === 'online').length ?? 0} color="green" />
+          <MetricCard label="Active" value={data?.items.filter((a) => a.status === 'active').length ?? 0} color="green" />
           <MetricCard label="Critical Risk" value={data?.items.filter((a) => a.criticality === 'critical').length ?? 0} color="red" />
           <MetricCard label="Avg Risk Score" value={data?.items.length ? Math.round(data.items.reduce((s, a) => s + a.risk_score, 0) / data.items.length) : 0} color="orange" />
         </div>
@@ -47,7 +48,7 @@ export function Assets() {
                     <tr key={a.id}>
                       <td className="font-medium text-gray-200">{a.hostname}</td>
                       <td className="font-mono text-xs text-gray-400">{a.ip_address}</td>
-                      <td className="text-gray-500 text-xs">{a.asset_type}</td>
+                      <td className="text-gray-500 text-xs">{a.type}</td>
                       <td className="text-gray-500 text-xs">{a.os}</td>
                       <td><span className={`text-xs font-medium ${statusColor(a.status)}`}>{a.status}</span></td>
                       <td><SeverityBadge severity={a.criticality} /></td>
